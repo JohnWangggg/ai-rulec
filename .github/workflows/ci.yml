@@ -14,11 +14,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install dependencies
         run: python3 -m pip install --disable-pip-version-check PyYAML
+      - name: Secret scan
+        run: python3 scripts/check_secrets.py --history
       - name: Compile
         run: python3 -m compileall -q ai_rulec
       - name: Unit tests

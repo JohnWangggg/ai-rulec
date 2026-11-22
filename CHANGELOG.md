@@ -12,3 +12,10 @@
 - Agent 健康：`health` / `status --health` 检查 7 个 AI 工具的端点与 CLI；`watch --health` 按间隔汇总。
 - 可靠性：probe 支持代理；缓存比较按 payload 忽略生成时间戳；watch 写 `last_seen`，`status` 报告 `stale`；health 默认重试 2 次。
 - 许可证：代码 GPL-3.0-or-later；仓库不包含第三方规则数据或 `out*/` 生成物。
+
+### 发布准备
+
+- 新增 `docs/PROJECT.md`（名称、定位、范围、目标用户、差异点）、`SECURITY.md`、`PRIVACY.md`、`docs/TRADEMARKS.md`。
+- 新增 `scripts/check_secrets.py`：扫描跟踪文件与 git 历史中的密钥、订阅 URI、绝对家目录、邮箱；已接入 CI。
+- 扫描结果：0 命中；仓库与历史均无密钥、订阅 URI、真实 profile；测试夹具改用中性 profile id。
+- 版本号统一到 `ai_rulec/__init__.py:__version__`，CLI `--version` 从包读取。

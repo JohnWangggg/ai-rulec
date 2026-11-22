@@ -25,6 +25,7 @@ from typing import Any, Iterator
 
 import yaml
 
+from . import defaults
 from .health import check_agents as _check_agents
 from .health import load_agents as _load_agents
 from .profile import (
@@ -208,7 +209,7 @@ def _agent_health_block(
         result["health"] = {**cached, "cached": True}
         return result["health"]
 
-    path = agents_path or "config/agents.yaml"
+    path = defaults.resolve("agents", agents_path)
     port = result.get("port")
     proxy_url = f"http://127.0.0.1:{port}" if port else None
     if proxy_url and _port_open(port) is False:

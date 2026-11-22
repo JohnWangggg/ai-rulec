@@ -6,6 +6,7 @@ from typing import Any
 
 import yaml
 
+from . import defaults
 from .health import check_agents, load_agents
 from .profile import (
     _runtime_config,
@@ -23,7 +24,7 @@ from .watch import (
     stale_after,
 )
 
-DEFAULT_AGENTS = "config/agents.yaml"
+DEFAULT_AGENTS = str(defaults.bundled("agents"))
 
 
 def profile_status(
@@ -175,7 +176,7 @@ def _agent_health(
     workers: int = 6,
 ) -> dict[str, Any]:
     """Run agent checks without letting a broken config take status down."""
-    path = agents_path or DEFAULT_AGENTS
+    path = defaults.resolve("agents", agents_path)
     if not Path(path).is_file():
         return {"error": f"agents config not found: {path}"}
     try:

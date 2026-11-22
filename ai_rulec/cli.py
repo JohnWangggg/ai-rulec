@@ -10,6 +10,7 @@ from typing import Any
 
 import yaml
 
+from . import __version__, defaults
 from .catalog import build_catalog
 from .emit import emit_all
 from .health import check_agents, diagnose, load_agents, port_open, resolve_proxy_url
@@ -56,16 +57,21 @@ def _probe_proxy(value: str) -> str | None:
 
 
 def _build(args: argparse.Namespace) -> int:
-    services = _load_yaml(args.services).get("services", {})
-    sources = _load_yaml(args.sources)
+    services_path = defaults.resolve("services", args.services)
+    sources_path = defaults.resolve("sources", args.sources)
+    services = _load_yaml(services_path).get("services", {})
+    sources = _load_yaml(sources_path)
     if not services:
-        raise SystemExit(f"{args.services}: no services")
+        raise SystemExit(f"{services_path}: no services")
 
     formats = tuple(
         ("mihomo", "sing-box", "surge") if "all" in args.formats else args.formats
     )
     os.makedirs(args.out, exist_ok=True)
-    rules, source_meta = load_rules(sources, services, args.max_age_days)
+    try:
+        rules, source_meta = load_rules(sources, services, args.max_age_days)
+    except FileNotFoundError as exc:
+        raise SystemExit(f"build: {exc}") from exc
     catalog, coverage = build_catalog(rules, services, source_meta)
 
     probe_path = os.path.join(args.out, "probes.json")
@@ -304,9 +310,9 @@ def _apply(args: argparse.Namespace) -> int:
 def _surge(args: argparse.Namespace) -> int:
     from .surge import apply_surge
 
-    services = []
-    if args.services_file:
-        services = list(_load_yaml(args.services_file).get("services", {}))
+    services = list(
+        _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
+    )
     if not services:
         coverage_path = os.path.join(args.out, "coverage.json")
         if os.path.exists(coverage_path):
@@ -363,9 +369,9 @@ def _surge(args: argparse.Namespace) -> int:
 def _singbox(args: argparse.Namespace) -> int:
     from .singbox import apply_singbox, discover_configs
 
-    services = []
-    if args.services_file:
-        services = list(_load_yaml(args.services_file).get("services", {}))
+    services = list(
+        _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
+    )
     if not services:
         coverage_path = os.path.join(args.out, "coverage.json")
         if os.path.exists(coverage_path):
@@ -424,9 +430,9 @@ def _singbox(args: argparse.Namespace) -> int:
 def _singbox_watch(args: argparse.Namespace) -> int:
     from .singbox_watch import watch as watch_singbox
 
-    services = []
-    if args.services_file:
-        services = list(_load_yaml(args.services_file).get("services", {}))
+    services = list(
+        _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
+    )
     if not services:
         coverage_path = os.path.join(args.out, "coverage.json")
         if os.path.exists(coverage_path):
@@ -588,7 +594,7 @@ def _watch(args: argparse.Namespace) -> int:
             interval=args.interval,
             once=args.once,
             json_output=args.json,
-            agents_path=args.agents,
+            agents_path=defaults.resolve("agents", args.agents),
             agent_names=args.agent or None,
             check_agent_health=args.health,
             agents_interval=args.agents_interval,
@@ -658,7 +664,7 @@ def _status(args: argparse.Namespace) -> int:
         report = profile_status(
             profile,
             state_path=args.state,
-            agents_path=args.agents,
+            agents_path=defaults.resolve("agents", args.agents),
             agent_names=args.agent or None,
             proxy_url=proxy_url,
             check_agents_run=args.health,
@@ -741,7 +747,7 @@ def _status(args: argparse.Namespace) -> int:
 
 def _health(args: argparse.Namespace) -> int:
     try:
-        agents = load_agents(args.agents)
+        agents = load_agents(defaults.resolve("agents", args.agents))
     except (OSError, ValueError, yaml.YAMLError) as exc:
         raise SystemExit(f"health: {exc}") from exc
 
@@ -848,12 +854,12 @@ def main(argv: list[str] | None = None) -> int:
         prog="ai-rulec",
         description="Compile AI-service rule catalogs into mihomo rule-providers.",
     )
-    parser.add_argument("--version", action="version", version="ai-rulec 0.13.0")
+    parser.add_argument("--version", action="version", version=f"ai-rulec {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     build = sub.add_parser("build", help="parse sources, build catalog, emit configs")
-    build.add_argument("--services", default="config/services.yaml")
-    build.add_argument("--sources", default="sources.yaml")
+    build.add_argument("--services", default=None, help="services catalog (default: bundled)")
+    build.add_argument("--sources", default=None, help="source list (default: bundled)")
     build.add_argument("--out", default="out")
     build.add_argument("--max-age-days", type=int, default=90)
     build.add_argument("--skip-verify", action="store_true")
@@ -1014,7 +1020,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     surge.add_argument("--out", default="out", help="build dir holding surge/AI-Rules")
     surge.add_argument("--lists-dir", default=None, help="override AI-Rules list source")
-    surge.add_argument("--services-file", default="config/services.yaml")
+    surge.add_argument("--services-file", default=None)
     surge.add_argument("--no-backup", action="store_true")
     surge.add_argument(
         "--rules-last",
@@ -1040,7 +1046,7 @@ def main(argv: list[str] | None = None) -> int:
     singbox.add_argument("--out", default="out", help="build dir holding singbox/AI-Rules")
     singbox.add_argument("--lists-dir", default=None, help="override rule-set source")
     singbox.add_argument("--rules-dir", default="AI-Rules", help="rule-set dir relative to config")
-    singbox.add_argument("--services-file", default="config/services.yaml")
+    singbox.add_argument("--services-file", default=None)
     singbox.add_argument("--absolute-paths", action="store_true")
     singbox.add_argument("--no-backup", action="store_true")
     singbox.add_argument("--dry-run", action="store_true")
@@ -1062,7 +1068,7 @@ def main(argv: list[str] | None = None) -> int:
     singbox_watch.add_argument("--out", default="out", help="build dir holding singbox/AI-Rules")
     singbox_watch.add_argument("--lists-dir", default=None)
     singbox_watch.add_argument("--rules-dir", default="AI-Rules")
-    singbox_watch.add_argument("--services-file", default="config/services.yaml")
+    singbox_watch.add_argument("--services-file", default=None)
     singbox_watch.add_argument("--interval", type=float, default=5.0)
     singbox_watch.add_argument("--once", action="store_true")
     singbox_watch.add_argument("--dry-run", action="store_true")
@@ -1146,7 +1152,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also check AI agent endpoints/CLIs on a slower cadence",
     )
-    watch.add_argument("--agents", default="config/agents.yaml")
+    watch.add_argument("--agents", default=None)
     watch.add_argument("--agent", action="append", default=[])
     watch.add_argument("--agents-interval", type=float, default=300.0)
     watch.add_argument("--agents-timeout", type=float, default=6.0)
@@ -1165,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="also run AI agent endpoint/CLI checks",
     )
-    status.add_argument("--agents", default="config/agents.yaml")
+    status.add_argument("--agents", default=None)
     status.add_argument("--agent", action="append", default=[])
     status.add_argument(
         "--proxy",
@@ -1180,7 +1186,7 @@ def main(argv: list[str] | None = None) -> int:
     health = sub.add_parser(
         "health", help="check AI agent endpoints and local CLIs"
     )
-    health.add_argument("--agents", default="config/agents.yaml")
+    health.add_argument("--agents", default=None)
     health.add_argument(
         "--proxy",
         default="auto",

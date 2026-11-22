@@ -389,6 +389,13 @@ def load_rules(
                     }
                 )
 
+    if entries and not any(os.path.exists(entry["path"]) for entry in entries):
+        missing = ", ".join(os.path.relpath(e["path"], global_root) for e in entries[:3])
+        raise FileNotFoundError(
+            f"no rule sources found under {global_root!r} (e.g. {missing}); "
+            "run scripts/fetch_sources.sh or set SOURCE_ROOT"
+        )
+
     rules: list[Rule] = []
     for entry in entries:
         if entry["aggregate"]:

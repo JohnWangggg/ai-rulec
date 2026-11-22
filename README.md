@@ -18,36 +18,44 @@
 
 ## 快速开始
 
+两种用法：仓库内直接跑（`python3 -m ai_rulec ...`），或用 pip 装（`ai-rulec ...`）。配置默认随包分发（`ai_rulec/data/*.yaml`），装完即可用；仓库根目录的 `config/services.yaml`、`config/agents.yaml`、`sources.yaml` 存在时会优先于内置默认值。
+
 ```bash
+# 0. 可选：装成命令。wheel 内置默认配置，不需要仓库
+python3 -m pip install ai-rulec
+ai-rulec health --list          # 不依赖仓库路径
+
 # 1. 依赖
 python3 -m pip install pyyaml
 
 # 2. 拉取来源（git clone + release 文件，约 20MB）
 ./scripts/fetch_sources.sh
+# 装成包、不在仓库目录时用 SOURCE_ROOT 指向来源目录
+export SOURCE_ROOT="$PWD/.sources"
 
 # 3. 构建。IP-ASN 需要 ASN.mmdb；没有就 drop，避免 mihomo 启动时下载失败
 #    探针默认走本机代理（proxy auto），否则 CN 直连会把可用的 AI 域名判成 tls_fail
-python3 -m ai_rulec build --asn-mode drop --probe --probe-proxy auto
+ai-rulec build --asn-mode drop --probe --probe-proxy auto
 
 # 一次出齐 mihomo / sing-box / Surge 三套产物
-python3 -m ai_rulec build --asn-mode drop --probe --probe-proxy auto --formats all
+ai-rulec build --asn-mode drop --probe --probe-proxy auto --formats all
 
 # 4. 检查当前 FlClash profile 和 provider cache
-python3 -m ai_rulec discover
-python3 -m ai_rulec status --latest --health
-python3 -m ai_rulec doctor --latest
+ai-rulec discover
+ai-rulec status --latest --health
+ai-rulec doctor --latest
 
 # 5. 先 dry-run，再真实合并。省略 --target 时自动推断出口组
 #    （url-test/fallback 优先，其次「手动选择」这类 selector）
-python3 -m ai_rulec apply --latest --meta out/mihomo-meta.yaml --dry-run
-python3 -m ai_rulec apply --latest --meta out/mihomo-meta.yaml
+ai-rulec apply --latest --meta out/mihomo-meta.yaml --dry-run
+ai-rulec apply --latest --meta out/mihomo-meta.yaml
 
 # 可选：单个服务指定出口
-python3 -m ai_rulec apply --latest --meta out/mihomo-meta.yaml --map openai=手动选择
+ai-rulec apply --latest --meta out/mihomo-meta.yaml --map openai=手动选择
 
 # 6. 单次 reconcile（CI/调试）或常驻
-python3 -m ai_rulec watch --latest --meta out/mihomo-meta.yaml --once
-python3 -m ai_rulec watch --latest --meta out/mihomo-meta.yaml --interval 5 --health
+ai-rulec watch --latest --meta out/mihomo-meta.yaml --once
+ai-rulec watch --latest --meta out/mihomo-meta.yaml --interval 5 --health
 ```
 
 FlClash 从订阅重写 profile 后，`AI-*` 组会消失；`watch` 会在下一轮检测到并自动重放。这是本项目存在的主要理由。
@@ -189,8 +197,10 @@ python3 -m ai_rulec health --compare   # 同时跑代理/直连，区分 proxy �
 
 ```bash
 python3 -m ai_rulec status --latest --health
-# agents:  7 ok, 0 degraded, 0 down  via http://127.0.0.1:6152
+# agents:  7 ok, 0 degraded, 0 down  via http://127.0.0.1:7890
 ```
+
+代理地址默认从 profile/`config.yaml` 的 `mixed-port` 推断；推断不到时才用 `7890`。
 
 `watch --health` 会把健康结果按 `--agents-interval`（默认 300s）写进 state，供 `status` 回看。
 
@@ -211,15 +221,28 @@ ai_rulec/
   watch.py      # reconcile 状态机与文件锁
   status.py     # 只读状态
   health.py     # agent HTTP/binary 健康检查
+  defaults.py   # 内置默认配置解析（内置包 -> 本地覆盖）
   cli.py
-config/services.yaml   # 11 个服务的人工 known_domains/processes（含 meta/muse）
-config/agents.yaml     # agent -> service/checks 映射
-sources.yaml           # 7 个来源
+ai_rulec/data/services.yaml   # 内置默认：11 个服务的 known_domains/processes
+ai_rulec/data/agents.yaml     # 内置默认：agent -> service/checks
+ai_rulec/data/sources.yaml    # 内置默认：7 个来源
+config/services.yaml          # 本地覆盖（可选，优先于内置）
+config/agents.yaml            # 本地覆盖（可选）
+sources.yaml                  # 本地覆盖（可选）
 scripts/fetch_sources.sh
 scripts/install_launchagent.sh
+scripts/install_singbox_agent.sh
+scripts/check_secrets.py     # 仓库/历史敏感信息扫描
 tests/test_core.py
 tests/test_health.py
+tests/test_health_retry.py
 tests/test_formats.py
+tests/test_singbox.py
+tests/test_singbox_watch.py
+tests/test_singbox_agent_script.py
+tests/test_watch_status.py
+tests/test_client_discovery.py
+tests/test_defaults.py
 ```
 
 产物：
@@ -261,6 +284,7 @@ tests/test_formats.py
 
 ```bash
 python3 -m pip install PyYAML
+python3 scripts/check_secrets.py --history              # 敏感信息扫描（CI 同款）
 python3 -m compileall -q ai_rulec                      # 语法检查（CI 同款）
 python3 -m unittest discover -s tests -v               # 全部单元测试
 ./scripts/check.sh                                     # 上面两步的封装
@@ -268,4 +292,14 @@ python3 -m pip wheel . --no-deps -w /tmp/ai-rulec-wheel  # 验证可打包出 wh
 python3 -m ai_rulec --help                             # 验证 CLI 入口可用
 ```
 
-CI 在 `.github/workflows/ci.yml`：push / PR / 手动 `workflow_dispatch` 触发，Python 3.11，先 `compileall` 再跑 `unittest discover`。
+CI 在 `.github/workflows/ci.yml`：push / PR / 手动 `workflow_dispatch` 触发，Python 3.11，依次跑敏感信息扫描、`compileall`、`unittest discover`。
+
+## 项目文档
+
+- [docs/PROJECT.md](docs/PROJECT.md)：名称、定位、范围、目标用户、差异点
+- [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)：来源与归属
+- [docs/LICENSE-ASSESSMENT.md](docs/LICENSE-ASSESSMENT.md)：许可证策略
+- [docs/TRADEMARKS.md](docs/TRADEMARKS.md)：商标声明
+- [docs/RELEASE.md](docs/RELEASE.md)：发布清单
+- [SECURITY.md](SECURITY.md)、[PRIVACY.md](PRIVACY.md)：安全与隐私
+- [CONTRIBUTING.md](CONTRIBUTING.md)、[CHANGELOG.md](CHANGELOG.md)

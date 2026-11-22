@@ -55,7 +55,7 @@ class ClientDiscoveryTest(unittest.TestCase):
                 "clash-verge",
                 "profile",
             ),
-            "com.follow.clash/profiles/382078391932686336.yaml": (
+            "com.follow.clash/profiles/123456789012345678.yaml": (
                 "flclash",
                 "profile",
             ),

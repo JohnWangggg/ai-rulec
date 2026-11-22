@@ -1,0 +1,158 @@
+services:
+  openai:
+    display_name: OpenAI
+    aliases: [openai, chatgpt, codex, sora]
+    known_domains:
+      - openai.com
+      - openai.org
+      - chatgpt.com
+      - chatgpt.site
+      - chat.com
+      - ai.com
+      - oaistatic.com
+      - oaiusercontent.com
+      - oaistatsig.com
+      - sora.com
+      - openai.com.cdn.cloudflare.net
+      - openaiapi-site.azureedge.net
+      - openaicom.imgix.net
+    known_processes: [ChatGPT, ChatGPT.exe, chatgpt, Codex, Codex.exe, codex, codex.exe]
+
+  anthropic:
+    display_name: Anthropic / Claude
+    aliases: [anthropic, claude, mcp]
+    known_domains:
+      - anthropic.com
+      - anthropic.team
+      - ant.dev
+      - antspace.dev
+      - claude.ai
+      - claude.com
+      - claude.dev
+      - claude.site
+      - clau.de
+      - claudeusercontent.com
+      - modelcontextprotocol.io
+      - modelcontextprotocol.com
+      - modelcontextprotocol.net
+      - modelcontextprotocol.org
+    known_processes: [Claude, Claude.exe, claude, claude.exe, cowork-svc.exe]
+
+  gemini:
+    display_name: Google Gemini
+    aliases: [gemini, bard, deepmind, google-ai]
+    known_domains:
+      - gemini.google.com
+      - gemini.google
+      - gemini.gstatic.com
+      - generativelanguage.googleapis.com
+      - ai.google.dev
+      - ai.studio
+      - aistudio.google.com
+      - deepmind.com
+      - deepmind.google
+      - notebooklm.google.com
+      - notebooklm.google
+      - jules.google.com
+      - jules.google
+      - labs.google.com
+      - labs.google
+      - antigravity.google
+      - antigravity.google.com
+      - antigravity.googleapis.com
+      - antigravity-pa.googleapis.com
+      - antigravity-unleash.goog
+      - bard.google.com
+    known_processes: [Antigravity, Antigravity.exe, antigravity]
+
+  meta:
+    display_name: Meta AI / Muse
+    aliases: [meta, muse, meta-ai, llama]
+    known_domains:
+      - ai.meta.com
+      - ai.developer.meta.com
+      - developer.meta.com
+      - aidemos.meta.com
+      - llama.developer.meta.com
+      - llama.com
+      - llamameta.net
+      - atmeta.com
+      - meta.ai
+      - metaaivm.com
+      - muse.ai
+    known_processes: [muse, Muse, muse.exe, meta]
+
+  copilot:
+    display_name: GitHub Copilot
+    aliases: [copilot, github-copilot, githubcopilot]
+    known_domains:
+      - githubcopilot.com
+      - copilot-proxy.githubusercontent.com
+      - copilot-workspace.githubnext.com
+      - production-copilot-host-westus.webpubsub.azure.com
+      - copilotprodattachments.blob.core.windows.net
+      - copilot-telemetry-service.githubusercontent.com
+      - copilot-telemetry.githubusercontent.com
+    known_processes: []
+
+  cursor:
+    display_name: Cursor
+    aliases: [cursor]
+    known_domains:
+      - cursor.com
+      - cursor.sh
+      - cursor.so
+      - cursor-cdn.com
+      - cursorapi.com
+      - cursorvm.com
+    known_processes: [Cursor, Cursor.exe]
+
+  windsurf:
+    display_name: Windsurf / Codeium
+    aliases: [windsurf, codeium]
+    known_domains:
+      - windsurf.com
+      - windsurf.build
+      - codeium.com
+      - codeiumdata.com
+      - server.codeium.com
+      - inference.codeium.com
+    known_processes: [Windsurf, Windsurf.exe]
+
+  xai:
+    display_name: xAI / Grok
+    aliases: [xai, grok]
+    known_domains:
+      - x.ai
+      - grok.com
+      - grok.x.com
+      - grokbot.com
+      - grokipedia.com
+    known_processes: []
+
+  perplexity:
+    display_name: Perplexity
+    aliases: [perplexity, pplx]
+    known_domains:
+      - perplexity.ai
+      - perplexity.com
+      - pplx.ai
+      - ppl-ai-file-upload.s3.amazonaws.com
+      - pplx-res.cloudinary.com
+    known_processes: []
+
+  groq:
+    display_name: Groq
+    aliases: [groq]
+    known_domains:
+      - groq.com
+      - groqcloud.com
+      - api.groq.com
+    known_processes: []
+
+  openrouter:
+    display_name: OpenRouter
+    aliases: [openrouter]
+    known_domains:
+      - openrouter.ai
+    known_processes: []
