@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ai-rulec"
+version = "0.13.0"
+description = "Compile AI service rules into verifiable mihomo, sing-box and Surge artifacts"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[project.scripts]
+ai-rulec = "ai_rulec.cli:main"
+
+[tool.setuptools]
+packages = ["ai_rulec"]

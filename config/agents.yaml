@@ -1,0 +1,155 @@
+agents:
+  antigravity:
+    display_name: Antigravity CLI
+    aliases: [agy, antigravity]
+    service: gemini
+    process_names: [agy, Antigravity, Antigravity.exe]
+    checks:
+      - id: web
+        type: http
+        url: https://antigravity.google/
+        expect: [200]
+        required: true
+      - id: docs
+        type: http
+        url: https://antigravity.google/docs/cli/overview
+        expect: [200]
+        required: false
+      - id: api
+        type: http
+        url: https://antigravity.googleapis.com/
+        expect: [200, 401, 403, 404]
+        required: false
+        timeout: 4
+      - id: cli
+        type: binary
+        binary: agy
+        args: ["--version"]
+        required: false
+
+  muse:
+    display_name: Meta Muse
+    aliases: [muse, meta-ai]
+    service: meta
+    process_names: [muse, muse.exe, Muse]
+    checks:
+      - id: web
+        type: http
+        url: https://muse.ai/
+        expect: [200]
+        required: true
+      - id: api
+        type: http
+        url: https://api.meta.ai/
+        expect: [200, 401, 403, 404]
+        required: true
+      - id: docs
+        type: http
+        url: https://ai.meta.com/
+        expect: [200]
+        required: false
+      - id: cli
+        type: binary
+        binary: muse
+        args: ["--version"]
+        required: false
+
+  claude-code:
+    display_name: Claude Code
+    aliases: [claude, claude-code]
+    service: anthropic
+    process_names: [claude, Claude, claude.exe]
+    checks:
+      - id: api
+        type: http
+        url: https://api.anthropic.com/v1/models
+        expect: [200, 401, 403]
+        required: true
+      - id: web
+        type: http
+        url: https://claude.ai/cdn-cgi/trace
+        expect: [200]
+        required: false
+      - id: cli
+        type: binary
+        binary: claude
+        args: ["--version"]
+        required: false
+
+  codex:
+    display_name: OpenAI Codex
+    aliases: [codex, openai-codex]
+    service: openai
+    process_names: [codex, Codex, codex.exe]
+    checks:
+      - id: api
+        type: http
+        url: https://api.openai.com/v1/models
+        expect: [200, 401, 403]
+        required: true
+      - id: web
+        type: http
+        url: https://chatgpt.com/
+        expect: [200]
+        required: false
+      - id: cli
+        type: binary
+        binary: codex
+        args: ["--version"]
+        required: false
+
+  gemini-cli:
+    display_name: Gemini CLI
+    aliases: [gemini, gemini-cli]
+    service: gemini
+    process_names: [gemini, gemini.exe]
+    checks:
+      - id: api
+        type: http
+        url: https://generativelanguage.googleapis.com/
+        expect: [200, 401, 403, 404]
+        required: true
+      - id: web
+        type: http
+        url: https://ai.google.dev/
+        expect: [200]
+        required: false
+      - id: cli
+        type: binary
+        binary: gemini
+        args: ["--version"]
+        required: false
+
+  cursor:
+    display_name: Cursor
+    aliases: [cursor]
+    service: cursor
+    process_names: [Cursor, cursor]
+    checks:
+      - id: web
+        type: http
+        url: https://cursor.com/
+        expect: [200]
+        required: true
+      - id: api
+        type: http
+        url: https://api2.cursor.sh/
+        expect: [200, 401, 403, 404]
+        required: false
+
+  windsurf:
+    display_name: Windsurf
+    aliases: [windsurf, codeium]
+    service: windsurf
+    process_names: [Windsurf, windsurf]
+    checks:
+      - id: api
+        type: http
+        url: https://server.codeium.com/
+        expect: [200, 401, 403, 404]
+        required: true
+      - id: web
+        type: http
+        url: https://windsurf.com/
+        expect: [200]
+        required: false

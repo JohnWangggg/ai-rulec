@@ -1,0 +1,13 @@
+.sources/
+out*/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+*.log
+*.bak.*
+.ai-rulec-watch.json
+.ai-rulec-watch.lock

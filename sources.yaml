@@ -1,0 +1,67 @@
+# Local P0 sources. Override with the SOURCE_ROOT env var.
+default_root: .sources
+
+sources:
+  - name: v2fly
+    type: v2fly
+    root: v2fly_domain-list-community
+    files:
+      openai: data/openai
+      anthropic: data/anthropic
+      gemini: data/google-gemini
+      copilot: data/github-copilot
+      cursor: data/cursor
+      windsurf: data/windsurf
+      xai: data/xai
+      perplexity: data/perplexity
+      groq: data/groq
+
+  - name: jinx
+    type: clash_yaml
+    root: jinxinkai_clash-ai-rules
+    files:
+      openai: OpenAI.yaml
+      anthropic: Anthropic.yaml
+      gemini: Gemini.yaml
+      cursor: Cursor.yaml
+      windsurf: Windsurf.yaml
+      xai: xAI.yaml
+      meta: Muse.yaml
+
+  - name: bm7
+    type: clash_yaml
+    root: bm7
+    files:
+      openai: OpenAI.yaml
+      anthropic: [Anthropic.yaml, Claude.yaml]
+      gemini: [Gemini.yaml, BardAI.yaml]
+      copilot: Copilot.yaml
+
+  - name: g4free
+    type: mixed
+    root: G4free_clash-ruleset
+    files:
+      openai: ruleset/ChatGPT.yaml
+      anthropic: ruleset/anthropic.txt
+      _aggregate: ruleset/OtherAIChat.txt
+
+  - name: mawq
+    type: mixed
+    root: ma-wenqian_ai-proxy-rules
+    files:
+      openai: rules/openai.list
+      anthropic: rules/claude.list
+
+  - name: sukka
+    type: surge
+    root: SukkaW_Surge
+    files:
+      _aggregate: Source/non_ip/ai.conf
+
+  - name: loyalsoldier
+    type: loyalsoldier
+    root: loyalsoldier
+    files:
+      proxy: proxy.txt
+      direct: direct.txt
+      reject: reject.txt
