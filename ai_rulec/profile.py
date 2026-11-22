@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from .merge import infer_target, merge_profile
+from .paths import mihomo_binary as _mihomo_binary
 
 
 DEFAULT_ROOTS = [
@@ -698,7 +699,7 @@ def apply_profile(
                 default_flow_style=False,
             )
 
-        mihomo = verify_mihomo or shutil.which("mihomo")
+        mihomo, mihomo_hint = _mihomo_binary(verify_mihomo)
         if mihomo:
             mihomo_home = home_dir
             has_dat = (mihomo_home / "GEOIP.dat").is_file()
@@ -736,8 +737,9 @@ def apply_profile(
         else:
             report["mihomo"] = {
                 "ok": None,
-                "warning": "mihomo not found; skipped runtime validation",
+                "warning": f"runtime validation skipped: {mihomo_hint}",
             }
+            report["warnings"] = [*(report.get("warnings") or []), mihomo_hint]
 
         os.replace(temp_path, destination)
     finally:
@@ -843,7 +845,7 @@ def restore_profile(
         "dry_run": dry_run,
     }
 
-    mihomo = verify_mihomo or shutil.which("mihomo")
+    mihomo, mihomo_hint = _mihomo_binary(verify_mihomo)
     if mihomo:
         validation = _validate_config_file(chosen, home_dir, mihomo)
         report["mihomo"] = validation
@@ -854,7 +856,7 @@ def restore_profile(
     else:
         report["mihomo"] = {
             "ok": None,
-            "warning": "mihomo not found; skipped runtime validation",
+            "warning": f"runtime validation skipped: {mihomo_hint}",
         }
 
     if dry_run:

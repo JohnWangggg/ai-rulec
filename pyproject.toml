@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,8 +7,7 @@ name = "ai-rulec"
 dynamic = ["version"]
 description = "Compile AI service rules into verifiable mihomo, sing-box and Surge artifacts"
 readme = "README.md"
-license = "GPL-3.0-or-later"
-license-files = ["LICENSE"]
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0"]
 classifiers = [

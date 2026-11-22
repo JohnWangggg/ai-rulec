@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.0 — 2026-11-22
+
+日常使用不再需要记命令。
+
+- `ai-rulec ui`：本地 Web 控制台，显示 AI 组出口、provider 缓存、代理端口、后台看护和 agent 连通性；按钮执行 `apply` / `doctor --fix` / `rollback` / `build`。仅绑 loopback，一次性 token，拒绝跨站请求。
+- `install.command`：macOS 双击安装，串起 venv、mihomo、来源、构建、应用、LaunchAgent 和控制台。
+- 路径解析不再依赖当前目录：`build` 记录最近输出，`apply` / `watch` / `merge` 省略 `--meta` 时自动找到它。
+- mihomo 缺失不再静默跳过：`apply` / `merge` / `verify` 返回可操作的安装提示。
+- `--version` 统一由 `ai_rulec.__version__` 驱动。
+
 ## 0.13.0 — 2026-11-22
 
 首个公开 alpha。

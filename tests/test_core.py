@@ -37,16 +37,7 @@ def write_yaml(path: Path, data: dict) -> None:
 def base_config() -> dict:
     return {
         "mixed-port": 7890,
-        "proxies": [
-            {
-                "name": "PROXY",
-                "type": "ss",
-                "server": "127.0.0.1",
-                "port": 8388,
-                "cipher": "aes-128-gcm",
-                "password": "test",
-            }
-        ],
+        "proxies": [],
         "proxy-groups": [
             {"name": "PROXY", "type": "select", "proxies": ["DIRECT"]}
         ],

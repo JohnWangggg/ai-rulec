@@ -9,6 +9,7 @@ from typing import Any
 import yaml
 
 from .formats import SURGE_PREFIXES
+from .paths import mihomo_binary
 
 ALLOWED_PREFIXES = (
     "DOMAIN,",
@@ -339,9 +340,10 @@ def verify_outputs(
 
     _collect_warnings(coverage, probes, warnings, checks)
 
-    mihomo = shutil.which("mihomo")
+    mihomo, mihomo_hint = mihomo_binary()
     if not mihomo:
-        checks["mihomo"] = {"status": "skipped", "reason": "mihomo not found"}
+        checks["mihomo"] = {"status": "skipped", "reason": mihomo_hint}
+        warnings.append(mihomo_hint)
     else:
         try:
             proc = subprocess.run(

@@ -16,6 +16,25 @@
 
 许可证：**GPL-3.0-or-later**。仓库不包含第三方规则数据或 `out*/` 生成物；来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
 
+## 一键安装（macOS）
+
+双击仓库根目录的 `install.command`。它会：建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用到当前客户端 → 装 LaunchAgent → 打开本地控制台。中途失败会停在 Terminal 里显示报错。
+
+```bash
+./install.command                 # 完整安装
+./install.command --no-agent      # 不装后台看护
+./install.command --skip-probe    # 跳过端点探测，构建更快
+```
+
+## 本地控制台
+
+```bash
+ai-rulec ui          # 打开 http://127.0.0.1:8787/?token=...
+ai-rulec ui --port 9000 --no-open
+```
+
+页面显示 AI 组出口、provider 缓存、代理端口、后台看护和 agent 连通性；四个按钮对应 `apply` / `doctor --fix` / `rollback` / `build`。服务只绑 loopback，每次启动生成一次性 token，跨站请求会被拒绝。
+
 ## 快速开始
 
 两种用法：仓库内直接跑（`python3 -m ai_rulec ...`），或用 pip 装（`ai-rulec ...`）。配置默认随包分发（`ai_rulec/data/*.yaml`），装完即可用；仓库根目录的 `config/services.yaml`、`config/agents.yaml`、`sources.yaml` 存在时会优先于内置默认值。
@@ -47,15 +66,16 @@ ai-rulec doctor --latest
 
 # 5. 先 dry-run，再真实合并。省略 --target 时自动推断出口组
 #    （url-test/fallback 优先，其次「手动选择」这类 selector）
-ai-rulec apply --latest --meta out/mihomo-meta.yaml --dry-run
-ai-rulec apply --latest --meta out/mihomo-meta.yaml
+#    从任意目录都能跑：省略 --meta 时用最近一次 build 的输出
+ai-rulec apply --latest --dry-run
+ai-rulec apply --latest
 
 # 可选：单个服务指定出口
-ai-rulec apply --latest --meta out/mihomo-meta.yaml --map openai=手动选择
+ai-rulec apply --latest --map openai=手动选择
 
 # 6. 单次 reconcile（CI/调试）或常驻
-ai-rulec watch --latest --meta out/mihomo-meta.yaml --once
-ai-rulec watch --latest --meta out/mihomo-meta.yaml --interval 5 --health
+ai-rulec watch --latest --once
+ai-rulec watch --latest --interval 5 --health
 ```
 
 FlClash 从订阅重写 profile 后，`AI-*` 组会消失；`watch` 会在下一轮检测到并自动重放。这是本项目存在的主要理由。
@@ -222,7 +242,10 @@ ai_rulec/
   status.py     # 只读状态
   health.py     # agent HTTP/binary 健康检查
   defaults.py   # 内置默认配置解析（内置包 -> 本地覆盖）
+  paths.py      # 最近一次 build 的输出、跨目录 --meta、mihomo 定位
+  ui.py         # 本地 Web 控制台（loopback + token）
   cli.py
+install.command               # macOS 双击安装器
 ai_rulec/data/services.yaml   # 内置默认：11 个服务的 known_domains/processes
 ai_rulec/data/agents.yaml     # 内置默认：agent -> service/checks
 ai_rulec/data/sources.yaml    # 内置默认：7 个来源

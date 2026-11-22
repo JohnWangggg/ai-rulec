@@ -10,7 +10,7 @@ from typing import Any
 
 import yaml
 
-from . import __version__, defaults
+from . import __version__, defaults, paths
 from .catalog import build_catalog
 from .emit import emit_all
 from .health import check_agents, diagnose, load_agents, port_open, resolve_proxy_url
@@ -67,6 +67,8 @@ def _build(args: argparse.Namespace) -> int:
     formats = tuple(
         ("mihomo", "sing-box", "surge") if "all" in args.formats else args.formats
     )
+    out_dir = paths.resolve_out(args.out if args.out != "out" else None)
+    args.out = str(out_dir)
     os.makedirs(args.out, exist_ok=True)
     try:
         rules, source_meta = load_rules(sources, services, args.max_age_days)
@@ -140,6 +142,8 @@ def _build(args: argparse.Namespace) -> int:
         report["ok"] = bool(verification["ok"])
         if verification["warnings"]:
             report["warnings"] = verification["warnings"]
+    if report["ok"]:
+        paths.record_build(args.out)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["ok"] else 1
 
@@ -174,11 +178,14 @@ def _probe(args: argparse.Namespace) -> int:
 
 
 def _merge(args: argparse.Namespace) -> int:
+    meta_path = paths.resolve_meta(args.meta)
+    if not meta_path.is_file():
+        raise SystemExit(
+            f"merge: {meta_path} not found; run 'ai-rulec build' (or pass --meta)"
+        )
     base = _load_yaml(args.base)
-    meta = _load_yaml(args.meta)
-    providers_dir = args.rules_dir or os.path.join(
-        os.path.dirname(os.path.abspath(args.meta)), "AI-Rules"
-    )
+    meta = _load_yaml(str(meta_path))
+    providers_dir = args.rules_dir or str(meta_path.parent / "AI-Rules")
     out_path = os.path.abspath(args.out)
     out_dir = os.path.dirname(out_path)
     try:
@@ -207,7 +214,9 @@ def _merge(args: argparse.Namespace) -> int:
     report["output"] = out_path
     report["providers_dir"] = os.path.abspath(providers_dir)
 
-    mihomo = args.mihomo or shutil.which("mihomo")
+    mihomo, mihomo_hint = paths.mihomo_binary(args.mihomo)
+    if not mihomo:
+        report["warnings"] = [*(report.get("warnings") or []), mihomo_hint]
     if mihomo:
         proc = subprocess.run(
             [mihomo, "-t", "-f", out_path],
@@ -222,7 +231,7 @@ def _merge(args: argparse.Namespace) -> int:
     else:
         report["mihomo"] = {
             "ok": None,
-            "warning": "mihomo not found; skipped runtime validation",
+            "warning": f"runtime validation skipped: {mihomo_hint}",
         }
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0 if report["mihomo"]["ok"] is not False else 1
@@ -261,10 +270,15 @@ def _apply(args: argparse.Namespace) -> int:
         profile = discovered["profiles"][0]["path"]
     if not profile:
         raise SystemExit("apply: pass a profile path or --latest")
+    meta_path = paths.resolve_meta(args.meta)
+    if not meta_path.is_file():
+        raise SystemExit(
+            f"apply: {meta_path} not found; run 'ai-rulec build' (or pass --meta)"
+        )
     try:
         report = apply_profile(
             profile,
-            args.meta,
+            str(meta_path),
             out_path=args.out,
             target=args.target,
             mapping=parse_target_map(args.map),
@@ -581,7 +595,7 @@ def _watch(args: argparse.Namespace) -> int:
     try:
         result = watch_config(
             profile,
-            meta_path=args.meta if args.reapply else None,
+            meta_path=str(paths.resolve_meta(args.meta)) if args.reapply else None,
             target=args.target,
             mapping=parse_target_map(args.map),
             rules_dir=args.rules_dir,
@@ -849,6 +863,13 @@ def _verify(args: argparse.Namespace) -> int:
     return 0 if result["ok"] else 1
 
 
+def _ui(args: argparse.Namespace) -> int:
+    from .ui import serve
+
+    serve(args.port, open_browser=not args.no_open)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ai-rulec",
@@ -923,7 +944,7 @@ def main(argv: list[str] | None = None) -> int:
         help="merge AI rule-providers and groups into an existing mihomo profile",
     )
     merge.add_argument("--base", required=True, help="existing mihomo/FlClash YAML")
-    merge.add_argument("--meta", default="out/mihomo-meta.yaml")
+    merge.add_argument("--meta", default=None, help="meta file (default: <out>/mihomo-meta.yaml)")
     merge.add_argument("--out", default="out/merged.yaml")
     merge.add_argument("--target", default=None, help="fallback egress group (default: infer url-test/selector group)")
     merge.add_argument(
@@ -974,7 +995,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="extra config root for --latest discovery",
     )
-    apply.add_argument("--meta", default="out/mihomo-meta.yaml")
+    apply.add_argument("--meta", default=None, help="meta file (default: <out>/mihomo-meta.yaml)")
     apply.add_argument("--out", default=None, help="write to another path")
     apply.add_argument("--target", default=None, help="fallback egress group (default: infer url-test/selector group)")
     apply.add_argument(
@@ -1113,7 +1134,7 @@ def main(argv: list[str] | None = None) -> int:
     watch.add_argument("profile", nargs="?", default=None)
     watch.add_argument("--latest", action="store_true")
     watch.add_argument("--profile-root", action="append", default=[])
-    watch.add_argument("--meta", default="out/mihomo-meta.yaml")
+    watch.add_argument("--meta", default=None, help="meta file (default: <out>/mihomo-meta.yaml)")
     watch.add_argument("--target", default=None, help="fallback egress group (default: infer url-test/selector group)")
     watch.add_argument(
         "--map",
@@ -1212,6 +1233,13 @@ def main(argv: list[str] | None = None) -> int:
     verify = sub.add_parser("verify", help="validate emitted configs and providers")
     verify.add_argument("--out", default="out")
     verify.set_defaults(func=_verify)
+
+    ui = sub.add_parser(
+        "ui", help="open the local web console (loopback + token)"
+    )
+    ui.add_argument("--port", type=int, default=8787)
+    ui.add_argument("--no-open", action="store_true", help="do not launch a browser")
+    ui.set_defaults(func=_ui)
 
     args = parser.parse_args(argv)
     return int(args.func(args))
