@@ -7,8 +7,16 @@ name = "ai-rulec"
 version = "0.13.0"
 description = "Compile AI service rules into verifiable mihomo, sing-box and Surge artifacts"
 readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0"]
+classifiers = [
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+    "Topic :: Internet :: Proxy Servers",
+]
+keywords = ["ai", "proxy", "mihomo", "clash", "sing-box", "surge"]
 
 [project.scripts]
 ai-rulec = "ai_rulec.cli:main"

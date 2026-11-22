@@ -14,6 +14,8 @@
 
 当前是 alpha，已在 macOS + FlClash 上做过真实 apply 和流量验证，在三格式产物上跑过 mihomo/sing-box/Surge 各自的校验；没有接真实节点池，也没有做 token/账号/agent 语义（那是下一层）。
 
+许可证：**GPL-3.0-or-later**。仓库不包含第三方规则数据或 `out*/` 生成物；来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
+
 ## 快速开始
 
 ```bash
@@ -229,9 +231,17 @@ tests/test_formats.py
 
 ## 来源与许可证
 
-**重要**：规则数据有 GPL 传染性风险。Loyalsoldier/clash-rules 是 GPL-3.0，blackmatrix7/ios_rule_script 是 GPL-2.0，MetaCubeX/meta-rules-dat 是 GPL-3.0；v2fly/domain-list-community 是 MIT。当前脚本把来源拉到 `.sources/`，构建产物在 `out*/`，不要把 GPL 来源或派生产物直接提交到闭源仓库。
+本项目代码采用 **GPL-3.0-or-later**，见 [LICENSE](LICENSE)。选择 GPL 是为了和 mihomo/Clash 生态及 GPL-3.0 规则源保持兼容；你可以按 GPL 使用、修改、分发，包括商业使用，但没有担保。
 
-详见 [docs/LICENSE-ASSESSMENT.md](docs/LICENSE-ASSESSMENT.md)。代码许可证暂未确定，先不要对外分发。
+仓库**不包含**第三方规则数据或生成物：`.sources/`、`out*/` 都在 `.gitignore` 中。`sources.yaml` 只记录上游地址和转换规则，构建时由你本地拉取。对外分发 `out*/` 产物前，请单独确认每个来源的许可证：
+
+- v2fly/domain-list-community：MIT，最安全。
+- Loyalsoldier/clash-rules、MetaCubeX/meta-rules-dat：GPL-3.0，与本项目代码兼容。
+- blackmatrix7/ios_rule_script：GPL-2.0，需确认是否允许升级到 GPL-3.0。
+- SukkaW/Surge、jinxinkai/clash-ai-rules、ma-wenqian/ai-proxy-rules：仓库元数据未给出明确/标准许可证，分发前逐项核对。
+- G4free/clash-ruleset：无 LICENSE，默认保留所有权利，不建议进入对外分发。
+
+详见 [docs/LICENSE-ASSESSMENT.md](docs/LICENSE-ASSESSMENT.md) 与 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。这不是法律意见。
 
 ## 已知限制
 
