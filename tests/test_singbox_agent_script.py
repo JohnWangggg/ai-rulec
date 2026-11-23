@@ -4,6 +4,7 @@ import os
 import plistlib
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -28,6 +29,10 @@ def run_script(*args: str, home: str) -> subprocess.CompletedProcess:
     )
 
 
+@unittest.skipUnless(
+    sys.platform == "darwin",
+    "install_singbox_agent.sh writes a launchd plist, which only macOS has",
+)
 @unittest.skipUnless(
     shutil.which("bash"), "install_singbox_agent.sh is a bash script"
 )

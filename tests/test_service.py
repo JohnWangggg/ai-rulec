@@ -52,6 +52,10 @@ class PlatformHarness(unittest.TestCase):
             stack.enter_context(mock.patch.object(platforms, name, value))
         # The repo's out/ must not leak into these tests; CI has none anyway.
         stack.enter_context(mock.patch.object(service, "_default_meta", lambda: self.meta))
+        # Lingering is a host fact (/var/lib/systemd/linger/$USER); CI runners
+        # set it, laptops usually do not. Default to "off" so the warning path
+        # is deterministic, and let tests flip it with their own patch.
+        stack.enter_context(mock.patch.object(service, "_linger_enabled", lambda: False))
         # Anything that shells out goes through _run; record instead of exec.
         stack.enter_context(mock.patch.object(service, "_run", self.fake_run))
         # Belt and braces: the module must never reach subprocess.run directly.
@@ -298,13 +302,16 @@ class LinuxInstallTests(PlatformHarness):
         text = unit.read_text(encoding="utf-8")
         self.assertIn("-m ai_rulec watch", text)
         self.assertIn("--latest", text)
-        self.assertIn(str(self.meta.resolve()), text)
+        # systemd renders each word through _systemd_arg, which escapes
+        # backslashes and quotes; assert on the rendered form so the test holds
+        # on Windows hosts too (where the scratch path is full of backslashes).
+        self.assertIn(service._systemd_arg(str(self.meta.resolve())), text)
         self.assertIn("--health", text)
         self.assertIn("--agents-interval 300", text)
         self.assertIn("--json", text)
         self.assertIn("Restart=always", text)
         self.assertIn("RestartSec=10", text)
-        self.assertIn(f"WorkingDirectory={report['working_dir']}", text)
+        self.assertIn(f"WorkingDirectory={service._systemd_arg(report['working_dir'])}", text)
         self.assertIn("WantedBy=default.target", text)
         systemctl = [call for call in self.calls if call[0] == "systemctl"]
         self.assertIn(["systemctl", "--user", "daemon-reload"], systemctl)
@@ -323,7 +330,8 @@ class LinuxInstallTests(PlatformHarness):
         report = service.install(meta=str(spaced))
         self.assertTrue(report["ok"], report)
         text = (self.config / "systemd" / "user" / "ai-rulec-watch.service").read_text("utf-8")
-        self.assertIn(f'"{spaced.resolve()}"', text)
+        self.assertIn(service._systemd_arg(str(spaced.resolve())), text)
+        self.assertIn('"', service._systemd_arg(str(spaced.resolve())), "path needs quoting")
 
     def test_enable_failure_is_a_report(self) -> None:
         def run(argv, *, timeout=120.0, cwd=None):

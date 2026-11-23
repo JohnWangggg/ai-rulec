@@ -88,6 +88,7 @@ class UiTests(unittest.TestCase):
             self.assertIn("no profile", ui._state()["error"])
 
 
+@unittest.skipIf(os.name == "nt", "install.command targets macOS; Windows uses install.ps1")
 @unittest.skipUnless(
     shutil.which("bash"), "install.command is a bash script"
 )

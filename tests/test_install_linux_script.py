@@ -17,6 +17,9 @@ def run_script(*args: str, cwd: str = REPO_ROOT) -> subprocess.CompletedProcess:
     )
 
 
+@unittest.skipIf(
+    os.name == "nt", "scripts/install.sh targets Linux; Windows has install.ps1"
+)
 @unittest.skipUnless(
     shutil.which("sh"), "these tests drive scripts/install.sh through a POSIX shell"
 )

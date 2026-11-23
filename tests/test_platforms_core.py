@@ -96,9 +96,11 @@ class SurgeProbeTests(unittest.TestCase):
 
         with mock.patch.object(platforms, "MACOS", False):
             candidates = surge.SURGE_CLI_CANDIDATES
-            app_bundle = [item for item in candidates if os.path.sep in item]
+            # Absolute candidates are POSIX paths; os.path.sep is "\\" on
+            # Windows, so it cannot be used to tell them from bare names.
+            app_bundle = [item for item in candidates if "/" in item]
             self.assertTrue(app_bundle, "expected a macOS-only absolute candidate")
-            with mock.patch.object(surge.shutil, "which", return_value=None):
+            with mock.patch.object(platforms, "which_exe", return_value=None):
                 self.assertIsNone(surge.find_surge_cli())
 
 

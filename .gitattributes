@@ -1,0 +1,8 @@
+# Shell scripts are executed by bash/sh, so they must stay LF on every
+# platform: a CRLF checkout makes `bash -n` and every `set -e` line fail.
+* text=auto eol=lf
+*.sh text eol=lf
+*.command text eol=lf
+*.ps1 text eol=crlf
+*.png binary
+*.webp binary

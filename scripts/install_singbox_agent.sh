@@ -107,10 +107,12 @@ PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
 
 xml_escape() {
   local value="$1"
-  # `&` in a replacement expands to the match, so escape it as `\&`.
-  value="${value//&/\&amp;}"
-  value="${value//</\&lt;}"
-  value="${value//>/\&gt;}"
+  # bash 5.2+ expands `&` in a replacement to the match; older bash does not.
+  # Turning the feature off makes one spelling correct on every version.
+  shopt -u patsub_replacement 2>/dev/null || true
+  value="${value//&/&amp;}"
+  value="${value//</&lt;}"
+  value="${value//>/&gt;}"
   printf '%s' "$value"
 }
 

@@ -78,14 +78,16 @@ def discover_surge_profiles(roots: list[str] | None = None) -> list[dict[str, An
 
 def find_surge_cli() -> str | None:
     # Surge is Apple-only, so never probe the app bundle elsewhere; a
-    # ``surge-cli`` on PATH is still honoured.
+    # ``surge-cli`` on PATH is still honoured. Absolute candidates are POSIX
+    # paths, so test for "/" rather than os.path.sep (which is "\\" on Windows
+    # and would classify every app-bundle path as a bare command name).
     candidates = (
         SURGE_CLI_CANDIDATES
         if platforms.MACOS
-        else tuple(item for item in SURGE_CLI_CANDIDATES if os.path.sep not in item)
+        else tuple(item for item in SURGE_CLI_CANDIDATES if "/" not in item)
     )
     for candidate in candidates:
-        if os.path.sep in candidate:
+        if "/" in candidate:
             if os.path.exists(candidate):
                 return candidate
         else:
