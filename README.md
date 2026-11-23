@@ -16,7 +16,7 @@
 
 许可证：**GPL-3.0-or-later**。仓库不包含第三方规则数据或 `out*/` 生成物；来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
 
-## 一键安装（macOS）
+## 系统支持
 
 双击仓库根目录的 `install.command`。它会：建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用到当前客户端 → 装 LaunchAgent → 打开本地控制台。中途失败会停在 Terminal 里显示报错。
 
@@ -25,6 +25,8 @@
 ./install.command --no-agent      # 不装后台看护
 ./install.command --skip-probe    # 跳过端点探测，构建更快
 ```
+
+三个平台的产物位置与命令行为一致，差异只在目录约定和后台服务管理器；目录表见 [docs/PLATFORMS.md](docs/PLATFORMS.md)。
 
 ## 本地控制台
 
@@ -80,12 +82,15 @@ ai-rulec watch --latest --interval 5 --health
 
 FlClash 从订阅重写 profile 后，`AI-*` 组会消失；`watch` 会在下一轮检测到并自动重放。这是本项目存在的主要理由。
 
-## 安装 LaunchAgent（7 天 soak）
+## 后台服务（7 天 soak）
+
+三个平台用同一个子命令，服务管理器按系统自动选择：macOS 用 LaunchAgent，Linux 用 systemd user unit，Windows 用当前用户的计划任务。
 
 ```bash
-./scripts/install_launchagent.sh install --interval 5
-./scripts/install_launchagent.sh status
-./scripts/install_launchagent.sh uninstall
+ai-rulec service install --interval 5   # 注册并启动常驻 watch
+ai-rulec service status                 # 是否在跑 + 最近日志
+ai-rulec service describe               # 只看会生成什么服务定义
+ai-rulec service uninstall              # 停止并移除
 ```
 
 日志：
@@ -93,7 +98,7 @@ FlClash 从订阅重写 profile 后，`AI-*` 组会消失；`watch` 会在下一
 - `~/Library/Logs/ai-rulec-watch.log`
 - `~/Library/Logs/ai-rulec-watch.err.log`
 
-LaunchAgent 只负责规则/cache 的生命周期和健康巡检，不会替你点 FlClash 的启动按钮；代理未启动时 `status` 会报 `proxy port ... is not listening`。
+后台服务只负责规则/cache 的生命周期和健康巡检，不会替你点 FlClash 的启动按钮；代理未启动时 `status` 会报 `proxy port ... is not listening`。三个平台的安装器都只调用 `ai-rulec service install`，不再各自写 plist / unit / 计划任务。
 
 ## 命令
 
@@ -111,6 +116,8 @@ LaunchAgent 只负责规则/cache 的生命周期和健康巡检，不会替你�
 | `singbox` | 把 AI selector/rule-set 补丁进现有 sing-box/Hiddify config | `--dry-run`、`--map`、`--absolute-paths`、`--no-backup` |
 | `singbox-watch` | 订阅刷新后自动重打 Hiddify/sing-box 补丁 | `--once`、`--dry-run`、`--force`、`--interval` |
 | `health` | 检查 Antigravity/Muse/Claude Code/Codex 等 agent 的 HTTP 端点与本地 CLI | `--proxy auto\|direct\|URL`、`--compare`、`--agent` |
+| `service` | 注册/查询/移除后台 watch（launchd / systemd user / 计划任务） | `--dry-run`、`--json`、`--interval` |
+| `ui` | 本地 Web 控制台，loopback + 一次性 token | `--port`、`--no-open` |
 
 `build --formats` 取值：
 
@@ -246,6 +253,11 @@ ai_rulec/
   ui.py         # 本地 Web 控制台（loopback + token）
   cli.py
 install.command               # macOS 双击安装器
+  PROJECT.md    # 定位、范围、目标用户
+  RELEASE.md    # 发布清单
+  THIRD_PARTY.md  # 来源与归属
+  LICENSE-ASSESSMENT.md  # 许可证策略
+  TRADEMARKS.md  # 商标声明
 ai_rulec/data/services.yaml   # 内置默认：11 个服务的 known_domains/processes
 ai_rulec/data/agents.yaml     # 内置默认：agent -> service/checks
 ai_rulec/data/sources.yaml    # 内置默认：7 个来源

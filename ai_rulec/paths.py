@@ -16,6 +16,8 @@ import os
 import shutil
 from pathlib import Path
 
+from . import platforms
+
 STATE_ENV = "AI_RULEC_STATE"
 LAST_BUILD = "last-build.json"
 MIHOMO_HINT = (
@@ -28,8 +30,7 @@ def state_dir() -> Path:
     override = os.environ.get(STATE_ENV)
     if override:
         return Path(override).expanduser()
-    base = Path(os.environ.get("XDG_STATE_HOME", "~/.local/state")).expanduser()
-    return base / "ai-rulec"
+    return platforms.state_home() / "ai-rulec"
 
 
 def record_build(out: str | Path) -> Path:

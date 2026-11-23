@@ -85,7 +85,7 @@ say "6/7 应用到当前代理客户端"
 
 if [ "$WITH_AGENT" -eq 1 ]; then
   say "7/7 安装后台看护"
-  "$ROOT/scripts/install_launchagent.sh" \
+  "$VENV/bin/ai-rulec" service install \
     --python "$VENV/bin/python3" \
     --meta "$ROOT/out/mihomo-meta.yaml" \
     --interval 5 \

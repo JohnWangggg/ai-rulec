@@ -14,7 +14,9 @@ import subprocess
 from datetime import datetime
 from typing import Any
 
+from . import platforms
 from .formats import infer_surge_target
+
 
 SURGE_CLI_CANDIDATES = (
     "surge-cli",
@@ -75,7 +77,14 @@ def discover_surge_profiles(roots: list[str] | None = None) -> list[dict[str, An
 
 
 def find_surge_cli() -> str | None:
-    for candidate in SURGE_CLI_CANDIDATES:
+    # Surge is Apple-only, so never probe the app bundle elsewhere; a
+    # ``surge-cli`` on PATH is still honoured.
+    candidates = (
+        SURGE_CLI_CANDIDATES
+        if platforms.MACOS
+        else tuple(item for item in SURGE_CLI_CANDIDATES if os.path.sep not in item)
+    )
+    for candidate in candidates:
         if os.path.sep in candidate:
             if os.path.exists(candidate):
                 return candidate
@@ -308,7 +317,7 @@ def apply_surge(
         temp_path = f"{profile_path}.ai-rulec.tmp"
         with open(temp_path, "w", encoding="utf-8") as fh:
             fh.write(patched)
-        os.replace(temp_path, profile_path)
+        platforms.atomic_replace(temp_path, profile_path)
         result["applied"] = True
         return result
     finally:

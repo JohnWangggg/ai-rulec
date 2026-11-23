@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -79,6 +80,9 @@ class UiTests(unittest.TestCase):
             self.assertIn("no profile", ui._state()["error"])
 
 
+@unittest.skipUnless(
+    shutil.which("bash"), "install.command is a bash script"
+)
 class InstallerTests(unittest.TestCase):
     def test_install_script_parses_in_bash(self):
         proc = subprocess.run(

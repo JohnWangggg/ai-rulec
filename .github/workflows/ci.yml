@@ -10,20 +10,50 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      # One broken OS must not hide the other two.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.11"]
+    env:
+      # Windows runners default to the locale encoding for pipes; the CLI,
+      # tests and the secret scan all print non-ASCII text and paths.
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v4
         with:
+          # Full history: the secret scan reads added lines from `git log -p`.
           fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
+
       - name: Install dependencies
-        run: python3 -m pip install --disable-pip-version-check PyYAML
+        # `python` (not `python3`) is the interpreter that exists on all three
+        # GitHub runner images, including Windows and macOS.
+        run: python -m pip install --disable-pip-version-check PyYAML
+
       - name: Secret scan
-        run: python3 scripts/check_secrets.py --history
+        run: python scripts/check_secrets.py --history
+
       - name: Compile
-        run: python3 -m compileall -q ai_rulec
+        run: python -m compileall -q ai_rulec
+
+      - name: CLI smoke (--help)
+        run: python -m ai_rulec --help
+
+      - name: Service describe (json)
+        # No proxy core is installed in CI; `describe` only reports the backend
+        # and argv it would use (pure data, no subprocess), so it must work on
+        # every OS without mihomo/sing-box. `install` is deliberately not run:
+        # it would register a real LaunchAgent/systemd unit/Scheduled Task.
+        run: python -m ai_rulec service describe --json
+
       - name: Unit tests
-        run: python3 -m unittest discover -s tests -v
+        run: python -m unittest discover -s tests -v

@@ -13,23 +13,15 @@ from typing import Any
 
 import yaml
 
+from . import platforms
 from .merge import infer_target, merge_profile
 from .paths import mihomo_binary as _mihomo_binary
 
 
-DEFAULT_ROOTS = [
-    "~/Library/Application Support/com.follow.clash",
-    "~/Library/Application Support/FlClash",
-    "~/.config/clash",
-    "~/.config/mihomo",
-    "~/.config/flclash",
-    "~/.local/share/io.github.flclash",
-    "~/Library/Application Support/io.github.clash-verge-rev.clash-verge-rev",
-    "~/Library/Application Support/clash-verge",
-    "~/Library/Application Support/Stash",
-    "~/Library/Application Support/ClashX",
-    "~/.config/clash-nyanpasu",
-]
+# Candidate proxy-client data directories for this OS. Computed from the shared
+# platform layer so Windows/Linux get their own guesses; entries stay
+# ``~``-relative and are validated by discovery at runtime.
+DEFAULT_ROOTS = platforms.client_roots()
 
 # Ordered most-specific first: "clash-verge" must win over the generic mihomo
 # "clash" component check below.
@@ -190,10 +182,7 @@ def _link_geo_assets(home: Path, data_dir: Path) -> list[str]:
             target = data_dir / alias
             if target.exists():
                 continue
-            try:
-                os.symlink(source, target)
-            except OSError:
-                shutil.copy2(source, target)
+            platforms.link_or_copy(source, target)
         linked.append(source_name)
     return linked
 
@@ -435,7 +424,7 @@ def repair_provider_cache(
                 os.close(fd)
                 shutil.copyfile(source, temp_path)
                 shutil.copystat(source, temp_path)
-                os.replace(temp_path, target)
+                platforms.atomic_replace(temp_path, target)
             finally:
                 if temp_path.exists():
                     temp_path.unlink()
@@ -624,7 +613,7 @@ def apply_profile(
         meta,
         target=target,
         mapping=mapping,
-        providers_dir=str(target_rules),
+        providers_dir=platforms.path_for_config(target_rules),
         output_dir=str(provider_base),
         replace_existing=replace_existing,
         preserve_existing_proxies=preserve_existing_proxies,
@@ -741,7 +730,7 @@ def apply_profile(
             }
             report["warnings"] = [*(report.get("warnings") or []), mihomo_hint]
 
-        os.replace(temp_path, destination)
+        platforms.atomic_replace(temp_path, destination)
     finally:
         if temp_path.exists():
             temp_path.unlink()
@@ -883,7 +872,7 @@ def restore_profile(
     try:
         with os.fdopen(fd, "wb") as fh:
             fh.write(chosen.read_bytes())
-        os.replace(temp_path, profile_file)
+        platforms.atomic_replace(temp_path, profile_file)
     finally:
         if temp_path.exists():
             temp_path.unlink()

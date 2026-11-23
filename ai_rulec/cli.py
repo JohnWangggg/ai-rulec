@@ -11,6 +11,7 @@ from typing import Any
 import yaml
 
 from . import __version__, defaults, paths
+from . import service as service_backend
 from .catalog import build_catalog
 from .emit import emit_all
 from .health import check_agents, diagnose, load_agents, port_open, resolve_proxy_url
@@ -870,6 +871,52 @@ def _ui(args: argparse.Namespace) -> int:
     return 0
 
 
+def _service(args: argparse.Namespace) -> int:
+    action = args.service_command
+    if action == "install":
+        report = service_backend.install(
+            meta=args.meta,
+            interval=args.interval,
+            agents_interval=args.agents_interval,
+            python=args.python,
+            dry_run=args.dry_run,
+        )
+    elif action == "uninstall":
+        report = service_backend.uninstall(dry_run=args.dry_run)
+    elif action == "status":
+        report = service_backend.status()
+    else:
+        report = service_backend.describe()
+
+    if args.json:
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"{report['action']}: {report['backend']} ({report['platform']})")
+        for key in ("message", "unit", "command", "detail"):
+            value = report.get(key)
+            if value:
+                print(f"  {key}: {value}")
+        for line in report.get("warnings", []):
+            print(f"  warning: {line}")
+        for line in report.get("notes", []):
+            print(f"  note: {line}")
+        for line in report.get("errors", []):
+            print(f"  error: {line}")
+        tails = report.get("log_tail") or {}
+        for stream in ("err", "out"):
+            lines = tails.get(stream) or []
+            if lines:
+                print(f"  last {stream} log lines:")
+                for line in lines:
+                    print(f"    {line}")
+
+    if not report.get("ok"):
+        return 1
+    if action == "status":
+        return 0 if report.get("installed") and report.get("running") else 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ai-rulec",
@@ -1240,6 +1287,36 @@ def main(argv: list[str] | None = None) -> int:
     ui.add_argument("--port", type=int, default=8787)
     ui.add_argument("--no-open", action="store_true", help="do not launch a browser")
     ui.set_defaults(func=_ui)
+
+    service = sub.add_parser(
+        "service",
+        help="install/status/uninstall ai-rulec watch as a per-user service",
+    )
+    service_sub = service.add_subparsers(dest="service_command", required=True)
+    for name, help_text in (
+        ("install", "write the unit/task and start it"),
+        ("status", "show whether the service is installed and running"),
+        ("uninstall", "stop and remove the unit/task"),
+        ("describe", "show the backend, unit path and command line (writes nothing)"),
+    ):
+        action = service_sub.add_parser(name, help=help_text)
+        action.add_argument(
+            "--meta", default=None, help="meta file (default: <project>/out/mihomo-meta.yaml)"
+        )
+        action.add_argument("--interval", type=float, default=service_backend.DEFAULT_INTERVAL)
+        action.add_argument(
+            "--agents-interval",
+            type=float,
+            default=service_backend.DEFAULT_AGENTS_INTERVAL,
+        )
+        action.add_argument(
+            "--python",
+            default=None,
+            help="interpreter for the service (default: the current one)",
+        )
+        action.add_argument("--dry-run", action="store_true", help="render only, write nothing")
+        action.add_argument("--json", action="store_true")
+        action.set_defaults(func=_service)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

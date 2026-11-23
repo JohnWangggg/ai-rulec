@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import plistlib
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -27,6 +28,9 @@ def run_script(*args: str, home: str) -> subprocess.CompletedProcess:
     )
 
 
+@unittest.skipUnless(
+    shutil.which("bash"), "install_singbox_agent.sh is a bash script"
+)
 class SingboxAgentScriptTests(unittest.TestCase):
     def test_syntax_is_valid(self) -> None:
         proc = subprocess.run(

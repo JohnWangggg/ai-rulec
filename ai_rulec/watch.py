@@ -26,6 +26,7 @@ from typing import Any, Iterator
 import yaml
 
 from . import defaults
+from . import platforms
 from .health import check_agents as _check_agents
 from .health import load_agents as _load_agents
 from .profile import (
@@ -65,7 +66,7 @@ def _save_state(path: Path, state: dict[str, Any]) -> None:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             json.dump(state, fh, ensure_ascii=False, indent=2)
             fh.write("\n")
-        os.replace(temp_path, path)
+        platforms.atomic_replace(temp_path, path)
     finally:
         if temp_path.exists():
             temp_path.unlink(missing_ok=True)

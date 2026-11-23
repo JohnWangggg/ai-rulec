@@ -18,6 +18,8 @@ from typing import Any
 
 from .singbox import apply_singbox, discover_configs
 
+from . import platforms
+
 DEFAULT_INTERVAL = 5.0
 
 
@@ -55,7 +57,7 @@ def _save_state(path: str, state: dict[str, Any]) -> None:
     with open(tmp, "w", encoding="utf-8") as fh:
         json.dump(state, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
-    os.replace(tmp, path)
+    platforms.atomic_replace(tmp, path)
 
 
 def _has_ai(config: dict[str, Any], services: list[str]) -> bool:

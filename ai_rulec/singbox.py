@@ -16,6 +16,9 @@ import subprocess
 from datetime import datetime
 from typing import Any
 
+from . import platforms
+
+
 def find_singbox() -> str | None:
     found = shutil.which("sing-box")
     if found:
@@ -118,6 +121,7 @@ def patch_config(
                 if path_base
                 else os.path.abspath(path)
             )
+        path = platforms.path_for_config(path)
         kept_rule_sets.append(
             {
                 "type": "local",
@@ -255,14 +259,9 @@ def _check(config_path: str, cwd: str) -> dict[str, Any]:
 
 
 def discover_configs() -> list[dict[str, Any]]:
-    home = os.path.expanduser("~")
-    candidates = [
-        os.path.join(home, "Library/Application Support/app.hiddify.com/data/current-config.json"),
-        os.path.join(home, ".config/sing-box/config.json"),
-        os.path.join(home, "Library/Application Support/sing-box/config.json"),
-    ]
     found: list[dict[str, Any]] = []
-    for path in candidates:
+    for candidate in platforms.singbox_config_roots():
+        path = str(platforms.expand(candidate))
         if os.path.isfile(path):
             found.append({"path": path, "kind": "sing-box", "size": os.path.getsize(path)})
     return found
@@ -346,7 +345,7 @@ def apply_singbox(
             shutil.copy2(config_path, backup_path)
             result["backup"] = backup_path
 
-        os.replace(staging, config_path)
+        platforms.atomic_replace(staging, config_path)
         result["applied"] = True
         return result
     finally:

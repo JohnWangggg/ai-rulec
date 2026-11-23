@@ -13,6 +13,8 @@ dependencies = ["PyYAML>=6.0"]
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
     "Topic :: Internet :: Proxy Servers",
     "Environment :: Console",
     "Intended Audience :: Developers",
