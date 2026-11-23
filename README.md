@@ -1,20 +1,19 @@
 # ai-rulec
 
-把 AI 服务规则从「手工域名清单」编译成**可验证、可回滚、可自愈**的代理配置。
+给本地代理客户端自动整理、写入并看护 AI 分流规则的命令行工具。
 
-它不是又一个 Clash 规则库，而是规则库上面的编译与生命周期层：
+用 FlClash / Clash、sing-box / Hiddify 或 Surge 访问 Claude、ChatGPT、Gemini、Cursor 时，常见两个麻烦：一是 AI 域名分散在多个开源规则库里，手抄容易漏掉或误伤普通站点；二是每次更新订阅，客户端会直接覆盖配置文件，手动加好的 `AI-*` 策略组和分流规则随之消失。
 
-- **服务目录**：按服务、角色、来源、置信度组织域名/进程/ASN，而不是几千行平铺 `DOMAIN-SUFFIX`。
-- **严格发射**：默认剔除共享域、未知服务、过宽 ASN、reject 集合；保留的每条规则都能回答「为什么在」。
-- **FlClash/mihomo 集成**：生成每服务代理组 `AI-<service>`，把规则插到用户规则之前，并维护 hashed provider cache。
-- **生命周期**：`doctor` 修缓存，`apply` 幂等合并，`watch` 在 FlClash 从订阅重写 profile 后自动重放，`rollback` 恢复备份。
-- **可验证**：mihomo `-t`、探针、单元测试、CI；失败不写半成品。
-- **多客户端**：同一份 catalog 编译成 mihomo YAML、sing-box rule-set（`version 3`）、Surge `.list`；`build --formats all` 一次出齐，`verify` 会用 `sing-box check` / `surge-cli --check` 实跑校验。
-- **Agent 健康**：内置 7 个 AI 工具的端点/CLI 检查，`status` 一并汇总；FlClash 自带的 13 项检测不可配置，这层外挂在它之上。
+`ai-rulec` 负责把这两件事自动化：
 
-当前是 alpha，已在 macOS + FlClash 上做过真实 apply 和流量验证，在三格式产物上跑过 mihomo/sing-box/Surge 各自的校验；Linux / Windows 的代码路径已就位但未在真机验证。没有接真实节点池，也没有做 token/账号/agent 语义（那是下一层）。
+1. **聚合清洗多个开源规则库**：拉取 v2fly、Loyalsoldier、blackmatrix7 等 7 个开源规则源，剔除共享域名、过宽 ASN 和未知归属的条目，按 OpenAI、Anthropic、Google AI、Cursor 等服务分别整理，并可先探测域名连通性。
+2. **生成规则并安全写进客户端**：一份数据同时输出 mihomo / FlClash、sing-box / Hiddify 和 Surge 格式；写入前先用对应内核（`mihomo -t`、`sing-box check`、`surge-cli --check`）校验，自动备份原配置，mihomo 系客户端可用 `rollback` 一键恢复。
+3. **订阅更新后自动补回**：后台监控配置文件，一旦更新订阅把 `AI-*` 策略组或规则冲掉，自动重新写入；FlClash 侧还会一并修复 provider 缓存。
+4. **顺手检查 AI 工具通不通**：内置 Claude Code、Codex、Gemini CLI 等 7 个常用 AI 工具的连通性检查，也带一个本机网页控制台（`ai-rulec ui`）方便看状态和手动操作。
 
-许可证：**GPL-3.0-or-later**。仓库不包含第三方规则数据或 `out*/` 生成物；来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
+> **它不是什么**：不是规则仓库（仓库本身不含第三方规则文件），不提供代理节点或订阅，也不托管 API Key 或账号。你照常在代理软件里选节点，它只负责把 AI 分流规则管好。
+
+当前为 **alpha** 版本：主力完整支持 **macOS + FlClash / mihomo**（写入、修缓存、后台防覆盖、本地控制台均已实机验证）；**sing-box / Hiddify** 与 **Surge** 支持同源规则导出和配置补丁；Linux / Windows 的安装与后台服务代码已就位，尚未真机验证。许可证为 **GPL-3.0-or-later**，第三方来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
 
 ## 系统支持
 
@@ -109,7 +108,7 @@ ai-rulec watch --latest --interval 5 --health
 
 FlClash 从订阅重写 profile 后，`AI-*` 组会消失；`watch` 会在下一轮检测到并自动重放。这是本项目存在的主要理由。
 
-## 后台服务（7 天 soak）
+## 后台服务
 
 三个平台用同一个子命令，服务管理器按系统自动选择：macOS 用 LaunchAgent，Linux 用 systemd user unit，Windows 用当前用户的计划任务。
 
@@ -269,7 +268,7 @@ python3 -m ai_rulec health --proxy auto
 echo $?   # 2
 ```
 
-JSON 形态是 `{"ok": null, "skipped": "<原因>", "agents": [], "summary": {...全 0}}`。显式传 `--proxy direct` 仍会照常检查——直连是用户选的路由，不是回退。`--compare` 需要一条可用的代理腿，代理关闭时会返回 `compare_skipped: true` 而不是只跑直连。
+JSON 形态是 `{"ok": null, "skipped": "<原因>", "agents": [], "summary": {...全 0}}`。显式传 `--proxy direct` 仍会照常检查——直连是用户选的路由，不是回退。`--compare` 需要代理端口处于监听状态，代理关闭时会返回 `compare_skipped: true` 而不是只跑直连。
 
 `watch --health` 会把健康结果按 `--agents-interval`（默认 300s）写进 state，供 `status` 回看。
 
@@ -375,7 +374,7 @@ tests/test_check_secrets.py  # 敏感信息扫描器自身的回归
 - FlClash 把 provider 改写成 hashed 绝对路径；重建后缓存比较按 payload 而非整文件，故 `# generated:` 时间戳变化不会误报 mismatch。
 - `sing-box check` 不校验 outbound/rule_set 标签引用，`surge-cli --check` 不校验外部 `.list` 是否存在；两处都只能证明语法，语义靠单元测试和运行时冒烟。
 - Surge 的 `.sgmodule` 不能定义策略组，所以 Surge 集成必须改 profile；`surge` 子命令只做定点 patch，不合并节点订阅。
-- 没有接真实节点池、token 计量、账号池、MCP 语义；这些属于 L2/L3。
+- 不提供节点或订阅，也不管 API Key、账号池或 token 计量。
 
 ## 开发与测试
 
