@@ -12,18 +12,43 @@
 - **多客户端**：同一份 catalog 编译成 mihomo YAML、sing-box rule-set（`version 3`）、Surge `.list`；`build --formats all` 一次出齐，`verify` 会用 `sing-box check` / `surge-cli --check` 实跑校验。
 - **Agent 健康**：内置 7 个 AI 工具的端点/CLI 检查，`status` 一并汇总；FlClash 自带的 13 项检测不可配置，这层外挂在它之上。
 
-当前是 alpha，已在 macOS + FlClash 上做过真实 apply 和流量验证，在三格式产物上跑过 mihomo/sing-box/Surge 各自的校验；没有接真实节点池，也没有做 token/账号/agent 语义（那是下一层）。
+当前是 alpha，已在 macOS + FlClash 上做过真实 apply 和流量验证，在三格式产物上跑过 mihomo/sing-box/Surge 各自的校验；Linux / Windows 的代码路径已就位但未在真机验证。没有接真实节点池，也没有做 token/账号/agent 语义（那是下一层）。
 
 许可证：**GPL-3.0-or-later**。仓库不包含第三方规则数据或 `out*/` 生成物；来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
 
 ## 系统支持
 
-双击仓库根目录的 `install.command`。它会：建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用到当前客户端 → 装 LaunchAgent → 打开本地控制台。中途失败会停在 Terminal 里显示报错。
+macOS 是参考实现，链路已在真机跑完整。Linux 与 Windows 的代码路径和后台服务管理器已就位，但**尚未在真机验证**：安装器先 `--dry-run` / `-DryRun`，再小步真实写入。逐项矩阵见 [docs/PLATFORMS.md](docs/PLATFORMS.md)。
+
+| 平台 | 状态 | 后台服务 | 安装入口 |
+|---|---|---|---|
+| macOS | ✓ 已实机验证 | LaunchAgent（launchd） | [install.command](install.command) |
+| Linux | 未在真机验证 | systemd user unit | [scripts/install.sh](scripts/install.sh) |
+| Windows | 未在真机验证 | Task Scheduler | [scripts/install.ps1](scripts/install.ps1) |
+
+## 安装
+
+| 平台 | 命令 | 说明 |
+|---|---|---|
+| macOS | 双击 [install.command](install.command)，或 `./install.command` | 建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用 → 装 LaunchAgent → 开控制台 |
+| Linux | `./scripts/install.sh`（POSIX sh，`bash scripts/install.sh` 同效） | 同样的顺序，mihomo 只检查不安装（用发行版包或 GitHub release），服务注册为 systemd user unit |
+| Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1` | 同样的顺序，mihomo 只检查不安装（`mihomo.exe` 需自行放入 PATH），服务注册为当前用户的计划任务 |
+
+安装器失败时会停在 Terminal / 窗口里显示具体报错，不静默跳过。三个安装器都支持跳过具体步骤：
+
+| 参数 | 作用 | 可用平台 |
+|---|---|---|
+| `--no-agent` / `-NoAgent` | 不装后台看护 | 三个都支持 |
+| `--no-ui` / `-NoUi` | 结束时不开控制台 | 三个都支持 |
+| `--skip-probe` / `-SkipProbe` | 跳过端点探测，构建更快 | 三个都支持 |
+| `--no-mihomo` / `-NoMihomo` | 跳过 mihomo 校验器（构建照常，运行时不跑 `mihomo -t`） | 三个都支持 |
+| `--python PATH` / `-Python <path>` | 指定解释器 | 仅 Linux / Windows；macOS 用环境变量 `PYTHON=/path/to/python3 ./install.command` |
+| `--project DIR` / `-Project <dir>` | 指定仓库根目录 | 仅 Linux / Windows |
+| `--dry-run` / `-DryRun` | 只打印将执行的命令，什么都不写 | 仅 Linux / Windows；macOS 的 `install.command` 没有该开关，改用 `ai-rulec <子命令> --dry-run` 逐步确认 |
 
 ```bash
-./install.command                 # 完整安装
-./install.command --no-agent      # 不装后台看护
-./install.command --skip-probe    # 跳过端点探测，构建更快
+./install.command                 # macOS 完整安装
+./install.command --no-agent      # macOS 不装后台看护
 ```
 
 三个平台的产物位置与命令行为一致，差异只在目录约定和后台服务管理器；目录表见 [docs/PLATFORMS.md](docs/PLATFORMS.md)。
@@ -40,6 +65,8 @@ ai-rulec ui --port 9000 --no-open
 ## 快速开始
 
 两种用法：仓库内直接跑（`python3 -m ai_rulec ...`），或用 pip 装（`ai-rulec ...`）。配置默认随包分发（`ai_rulec/data/*.yaml`），装完即可用；仓库根目录的 `config/services.yaml`、`config/agents.yaml`、`sources.yaml` 存在时会优先于内置默认值。
+
+下面的命令是 POSIX shell 写法（macOS / Linux）。Windows 上把 `python3` 换成 `python`、`export VAR=...` 换成 `$env:VAR = "..."`；`scripts/fetch_sources.sh` 需要 bash，Windows 上改由 `scripts/install.ps1` 用 `git clone` 拉同样一批来源（需要 Git for Windows），已有 `.sources\` 时不会重复拉取。详见 [docs/WINDOWS.md](docs/WINDOWS.md)。
 
 ```bash
 # 0. 可选：装成命令。wheel 内置默认配置，不需要仓库
@@ -95,8 +122,9 @@ ai-rulec service uninstall              # 停止并移除
 
 日志：
 
-- `~/Library/Logs/ai-rulec-watch.log`
-- `~/Library/Logs/ai-rulec-watch.err.log`
+- macOS：`~/Library/Logs/ai-rulec-watch.log`、`~/Library/Logs/ai-rulec-watch.err.log`
+- Linux：`~/.local/state/ai-rulec/log/`
+- Windows：**无持久日志文件**（Task Scheduler 会丢弃 stdout/stderr，`--json` 输出不落盘）；用 `ai-rulec service status` 看实时状态
 
 后台服务只负责规则/cache 的生命周期和健康巡检，不会替你点 FlClash 的启动按钮；代理未启动时 `status` 会报 `proxy port ... is not listening`。三个平台的安装器都只调用 `ai-rulec service install`，不再各自写 plist / unit / 计划任务。
 
@@ -140,11 +168,11 @@ sing-box 没有 ASN 匹配器，`ip_asn` 会被丢弃（`asn_mode` 对 sing-box 
 
 ## 其它客户端
 
-| 客户端 | 子命令 | 写入方式 | 状态 |
+| 客户端 | 子命令 | 写入方式 | 平台 |
 |---|---|---|---|
-| mihomo / FlClash | `apply`、`watch`、`doctor` | 直接改 profile + hashed provider cache，`mihomo -t` 通过后原子写 | 实机已验证（macOS + FlClash） |
-| sing-box / Hiddify | `singbox`、`singbox-watch` | 补丁 `route.rules` 与 `AI-*` selector，`sing-box check` 通过后原子写 | sing-box 已支持；Hiddify 实机写入**未启用**（未在真实 Hiddify 上验证，先用 `--dry-run`） |
-| Surge | `surge` | 定点 patch `[Proxy Group]`/`[Rule]`，`.list` 复制到 profile 同目录，`surge-cli --check` 通过后原子写 | 已支持（需本机 `surge-cli`） |
+| mihomo / FlClash | `apply`、`watch`、`doctor` | 直接改 profile + hashed provider cache，`mihomo -t` 通过后原子写 | macOS 实机已验证；Linux / Windows 未在真机验证 |
+| sing-box / Hiddify | `singbox`、`singbox-watch` | 补丁 `route.rules` 与 `AI-*` selector，`sing-box check` 通过后原子写 | macOS 副本端到端验证；Hiddify 实机写入**未启用**（先用 `--dry-run`）；Linux / Windows 未在真机验证 |
+| Surge | `surge` | 定点 patch `[Proxy Group]`/`[Rule]`，`.list` 复制到 profile 同目录，`surge-cli --check` 通过后原子写 | macOS 已支持（需本机 `surge-cli`）；Linux / Windows 无该工具，不适用 |
 
 ### Surge
 
@@ -179,7 +207,7 @@ sing-box check -D out/singbox -c out/singbox/config.json
 Hiddify 的配置是 sing-box fork，订阅刷新会重写 `current-config.json`。`singbox` 子命令直接给现有配置打补丁：
 
 ```bash
-python3 -m ai_rulec singbox --dry-run   # 自动找 ~/Library/Application Support/app.hiddify.com/data/current-config.json
+python3 -m ai_rulec singbox --dry-run   # 按平台候选目录自动找 Hiddify/sing-box 配置（见 docs/PLATFORMS.md）
 python3 -m ai_rulec singbox             # 备份 + sing-box check + 原子写
 python3 -m ai_rulec singbox --target select --map openai=select
 ```
@@ -248,11 +276,22 @@ ai_rulec/
   watch.py      # reconcile 状态机与文件锁
   status.py     # 只读状态
   health.py     # agent HTTP/binary 健康检查
+  models.py     # 规则与服务的 dataclass 定义
+  normalize.py  # 域名归一化、共享域名单、排除规则
+  verify.py     # mihomo / sing-box / surge-cli 校验器调用
   defaults.py   # 内置默认配置解析（内置包 -> 本地覆盖）
   paths.py      # 最近一次 build 的输出、跨目录 --meta、mihomo 定位
+  platforms.py  # 跨平台：目录、客户端候选路径、原子写重试、链接/复制、which
+  service.py    # 后台服务：launchd / systemd user / 计划任务
   ui.py         # 本地 Web 控制台（loopback + token）
   cli.py
+  __init__.py   # 版本号（pyproject 动态读取）
+  __main__.py   # python -m ai_rulec 入口
 install.command               # macOS 双击安装器
+docs/
+  PLATFORMS.md  # 三平台支持矩阵与目录约定
+  LINUX.md      # Linux 安装与 systemd 说明
+  WINDOWS.md    # Windows 安装与计划任务说明
   PROJECT.md    # 定位、范围、目标用户
   RELEASE.md    # 发布清单
   THIRD_PARTY.md  # 来源与归属
@@ -265,10 +304,16 @@ config/services.yaml          # 本地覆盖（可选，优先于内置）
 config/agents.yaml            # 本地覆盖（可选）
 sources.yaml                  # 本地覆盖（可选）
 scripts/fetch_sources.sh
-scripts/install_launchagent.sh
+scripts/install.sh           # Linux 安装器（POSIX sh）
+scripts/install.ps1          # Windows 安装器（PowerShell）
 scripts/install_singbox_agent.sh
 scripts/check_secrets.py     # 仓库/历史敏感信息扫描
+scripts/check.sh             # compileall + unittest 的封装
 tests/test_core.py
+tests/test_platforms_core.py # 目录 / 原子写 / 链接退化 / 路径渲染
+tests/test_service.py        # 三平台服务定义与 CLI 动词
+tests/test_install_linux_script.py  # Linux 安装器的参数与顺序
+tests/test_paths_ui.py       # 最近输出解析与本地控制台
 tests/test_health.py
 tests/test_health_retry.py
 tests/test_formats.py
@@ -303,7 +348,9 @@ tests/test_defaults.py
 
 ## 已知限制
 
-- `apply`/`doctor`/`watch` 的 FlClash 路径发现是 macOS 优先；Linux/Windows 需要补数据目录。
+- **Linux / Windows 未在真机验证**：跨平台目录、客户端候选路径、原子写和后台服务都已实现并有单元测试，但还没有真实客户端 + 真实流量的端到端结果。先 `--dry-run`，再小步真实写入；矩阵见 [docs/PLATFORMS.md](docs/PLATFORMS.md)。
+- 客户端配置目录是**候选猜测**（`platforms.client_roots()`），不是权威答案；以 `ai-rulec discover` 的输出为准，必要时用 `--root` 指定。
+- Windows 上客户端占用 profile 时原子替换会重试，仍失败就报错退出并提示关闭客户端，不会写半成品（`platforms.atomic_replace()`）。
 - `watch` 不自动点 FlClash 的启动按钮，也不替代 FlClash 的 UI；它只保证规则和 cache 不漂移。
 - 探针只做 DNS/TLS/HTTP 可达性，不做账号/区域/模型级验证。
 - `mihomo -t` 只验证配置可加载，不验证实际路由语义。
@@ -327,11 +374,12 @@ python3 -m pip wheel . --no-deps -w /tmp/ai-rulec-wheel  # 验证可打包出 wh
 python3 -m ai_rulec --help                             # 验证 CLI 入口可用
 ```
 
-CI 在 `.github/workflows/ci.yml`：push / PR / 手动 `workflow_dispatch` 触发，Python 3.11，依次跑敏感信息扫描、`compileall`、`unittest discover`。
+CI 在 `.github/workflows/ci.yml`：push / PR / 手动 `workflow_dispatch` 触发，`ubuntu-latest` / `windows-latest` / `macos-latest` 三平台矩阵，Python 3.11，依次跑敏感信息扫描、`compileall`、`--help` 冒烟、`service describe --json`、`unittest discover`。矩阵只证明代码在三平台能导入、编译和跑测试；它不注册真实服务、也不连真实客户端，所以不等于真机验证（见 [docs/PLATFORMS.md](docs/PLATFORMS.md)）。
 
 ## 项目文档
 
 - [docs/PROJECT.md](docs/PROJECT.md)：名称、定位、范围、目标用户、差异点
+- [docs/PLATFORMS.md](docs/PLATFORMS.md)：macOS / Linux / Windows 支持矩阵与目录约定（含 [LINUX.md](docs/LINUX.md)、[WINDOWS.md](docs/WINDOWS.md)）
 - [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)：来源与归属
 - [docs/LICENSE-ASSESSMENT.md](docs/LICENSE-ASSESSMENT.md)：许可证策略
 - [docs/TRADEMARKS.md](docs/TRADEMARKS.md)：商标声明

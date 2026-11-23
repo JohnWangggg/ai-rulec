@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,9 @@ def run_script(*args: str, cwd: str = REPO_ROOT) -> subprocess.CompletedProcess:
     )
 
 
+@unittest.skipUnless(
+    shutil.which("sh"), "these tests drive scripts/install.sh through a POSIX shell"
+)
 class InstallLinuxScriptTests(unittest.TestCase):
     def test_syntax_is_valid_for_bash_and_sh(self) -> None:
         for shell in ("bash", "sh"):

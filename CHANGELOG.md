@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.15.0] - 2026-11-23
+
+跨平台：同一份代码在 macOS、Linux、Windows 上走同一套路径与生命周期。
+
+### Added
+
+- 新增 `ai_rulec/platforms.py`：把 OS 差异收敛到一处 —— config/data/state/log 目录、代理客户端候选目录、sing-box/Hiddify 候选配置、`which_exe`（Windows 补 `.exe`）、`path_for_config`（配置内统一正斜杠）、`link_or_copy`（无符号链接权限时退回复制）。
+- 原子写统一走 `platforms.atomic_replace()`：底层 `os.replace`，Windows 上客户端占用目标文件时按退避重试，耗尽后抛 `PermissionError` 并提示关闭占用文件的客户端，绝不写半成品。
+- 新增 `service` 子命令（`install` / `status` / `describe` / `uninstall`，支持 `--meta`、`--interval`、`--agents-interval`、`--python`、`--dry-run`、`--json`）：macOS 注册 LaunchAgent，Linux 注册 systemd user unit，Windows 注册当前用户的计划任务；`describe` 只打印本平台会生成的定义，不落盘、不起进程。
+- 新增 Linux 安装器 `scripts/install.sh` 与 Windows 安装器 `scripts/install.ps1`：与 `install.command` 同样的顺序（venv → mihomo → 来源 → 构建 → 应用 → 后台服务 → 控制台），服务注册一律交给 `ai-rulec service install`，脚本不直接调 `systemctl` / `schtasks`。两者都支持只打印不落盘的 `--dry-run` / `-DryRun`。
+- CI 改为 `ubuntu-latest` / `windows-latest` / `macos-latest` 三平台矩阵（Python 3.11，`fail-fast: false`），并增加 `python -m ai_rulec --help` 与 `service describe --json` 冒烟；CI 不注册真实服务，也不连真实客户端。
+- 新增文档 `docs/PLATFORMS.md`（支持矩阵、目录约定、服务承载方式、已知缺口）、`docs/LINUX.md`、`docs/WINDOWS.md`。
+- 新增测试 `tests/test_platforms_core.py`、`tests/test_service.py`。
+
+### Known limitations
+
+- Linux 与 Windows 是**代码完成、未在真机验证**：目录解析、候选路径、原子写、服务定义都有单元测试，但没有真实 FlClash/Hiddify 客户端与真实流量的端到端结果。请先 `--dry-run` 再小步真实写入。
+- 客户端配置目录是候选猜测，必须由 `discover` 在运行时验证；版本或打包方式不同就可能找不到。
+- Surge 仍只在 macOS 有意义（依赖本机 `surge-cli`）；Hiddify 的真实写入仍未启用。
+
 ## 0.14.0 — 2026-11-22
 
 日常使用不再需要记命令。
