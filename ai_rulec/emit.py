@@ -16,10 +16,11 @@ from .formats import (
     surge_fragment,
     surge_list_text,
     surge_profile,
+    tower_document,
 )
 from .normalize import BROAD_ASNS
 
-FORMATS = ("mihomo", "sing-box", "surge")
+FORMATS = ("mihomo", "sing-box", "surge", "tower")
 
 
 def _sha256(path: str) -> str:
@@ -154,10 +155,12 @@ def emit_all(
     providers_dir = os.path.join(outdir, "AI-Rules")
     singbox_dir = os.path.join(outdir, "singbox", "AI-Rules")
     surge_dir = os.path.join(outdir, "surge", "AI-Rules")
+    tower_dir = os.path.join(outdir, "tower")
     for target in (
         providers_dir if "mihomo" in formats else None,
         singbox_dir if "sing-box" in formats else None,
         surge_dir if "surge" in formats else None,
+        tower_dir if "tower" in formats else None,
     ):
         if target:
             os.makedirs(target, exist_ok=True)
@@ -167,6 +170,7 @@ def emit_all(
     rule_lines: list[str] = []
     excluded: dict[str, dict[str, list[str]]] = {}
     service_names: list[str] = []
+    tower_summaries: dict[str, dict[str, Any]] = {}
 
     for service in sorted(services):
         summary = coverage["services"].get(service)
@@ -185,6 +189,7 @@ def emit_all(
             else "# raw: includes shared/unknown/reject-set domains"
         )
         service_names.append(service)
+        tower_summaries[service] = summary
         if "mihomo" in formats:
             classical_path = os.path.join(providers_dir, f"{service}.yaml")
             domain_path = os.path.join(providers_dir, f"{service}.domain.yaml")
@@ -272,6 +277,24 @@ def emit_all(
         artifacts[os.path.relpath(surge_profile_path, outdir)] = _sha256(
             surge_profile_path
         )
+
+    if "tower" in formats:
+        tower_path = os.path.join(tower_dir, "ai-rules.yaml")
+        document = tower_document(service_names, tower_summaries, asn_mode=asn_mode)
+        with open(tower_path, "w", encoding="utf-8") as fh:
+            fh.write(
+                "\n".join(
+                    [
+                        "# ai-rulec — Tower rule scheme (self-contained Clash YAML)",
+                        "# Import in Tower: Rules -> + -> File, then pick this file.",
+                        "# rule-providers are inline: Tower's sandbox cannot read loose files.",
+                        f"# generated: {generated_at}",
+                        "",
+                    ]
+                )
+                + _dump_yaml(document)
+            )
+        artifacts[os.path.relpath(tower_path, outdir)] = _sha256(tower_path)
 
     if "mihomo" in formats:
         service_groups = [

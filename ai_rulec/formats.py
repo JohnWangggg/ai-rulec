@@ -246,6 +246,67 @@ def singbox_route_fragment(
     return {"outbounds": outbounds, "route": route}
 
 
+def tower_document(
+    services: list[str],
+    summaries: dict[str, dict[str, Any]],
+    target: str = "DIRECT",
+    mapping: dict[str, str] | None = None,
+    asn_mode: str = "keep",
+    include_all_proxies: bool = True,
+) -> dict[str, Any]:
+    """A self-contained Clash document Tower can import as a rule scheme.
+
+    Tower's Clash reader rejects ``type: file`` providers (the sandbox cannot
+    read loose files), so every rule set ships inline under ``payload``. Groups
+    carry ``include-all-proxies`` so a rule-only import binds Tower's own node
+    pool instead of falling back to DIRECT only.
+    """
+    mapping = mapping or {}
+    groups: list[dict[str, Any]] = []
+    providers: dict[str, dict[str, Any]] = {}
+    rules: list[str] = []
+    emitted: list[str] = []
+    for service in services:
+        summary = summaries.get(service)
+        if not summary:
+            continue
+        payload = surge_lines(summary, "classical", asn_mode)
+        if not payload:
+            continue
+        emitted.append(service)
+        providers[service] = {
+            "type": "inline",
+            "behavior": "classical",
+            "payload": payload,
+        }
+        group: dict[str, Any] = {
+            "name": f"AI-{service}",
+            "type": "select",
+            "proxies": _unique([mapping.get(service, target)]),
+        }
+        if include_all_proxies:
+            group["include-all-proxies"] = True
+        groups.append(group)
+        rules.append(f"RULE-SET,{service},AI-{service}")
+    if not groups:
+        raise ValueError("tower format needs at least one service with rules")
+    groups.append(
+        {
+            "name": "AI",
+            "type": "select",
+            "proxies": [f"AI-{service}" for service in emitted] + ["DIRECT"],
+        }
+    )
+    return {
+        "mixed-port": 7890,
+        "mode": "rule",
+        "log-level": "info",
+        "proxy-groups": groups,
+        "rule-providers": providers,
+        "rules": rules + ["MATCH,AI"],
+    }
+
+
 def infer_surge_target(text: str) -> str | None:
     """Pick an existing Surge policy that comfortably routes traffic.
 

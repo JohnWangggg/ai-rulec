@@ -11,6 +11,7 @@ from ai_rulec.formats import (
     surge_lines,
     surge_list_text,
     surge_profile,
+    tower_document,
 )
 from ai_rulec.surge import patch_profile
 
@@ -138,6 +139,117 @@ FINAL,Proxy
     def test_missing_rule_section_raises(self) -> None:
         with self.assertRaises(ValueError):
             patch_profile("[General]\nx = y\n", ["openai"], target="Proxy")
+
+
+class TowerDocumentTests(unittest.TestCase):
+    def test_inline_providers_and_groups(self) -> None:
+        doc = tower_document(["openai"], {"openai": SUMMARY})
+        providers = doc["rule-providers"]
+        self.assertEqual(providers["openai"]["type"], "inline")
+        self.assertEqual(providers["openai"]["behavior"], "classical")
+        # Tower's reader cannot open loose files; path/url must never appear.
+        for forbidden in ("path", "url"):
+            self.assertNotIn(forbidden, providers["openai"])
+        payload = providers["openai"]["payload"]
+        self.assertIn("DOMAIN-SUFFIX,chatgpt.com", payload)
+        self.assertIn("PROCESS-NAME,Codex", payload)
+        self.assertIn("IP-CIDR,199.47.142.0/23,no-resolve", payload)
+        self.assertIn("IP-CIDR6,2604:f20::/32,no-resolve", payload)
+        names = [group["name"] for group in doc["proxy-groups"]]
+        self.assertEqual(names, ["AI-openai", "AI"])
+        self.assertIn("MATCH,AI", doc["rules"])
+
+    def test_asn_drop_removes_ip_asn(self) -> None:
+        doc = tower_document(["openai"], {"openai": SUMMARY}, asn_mode="drop")
+        self.assertNotIn(
+            "IP-ASN,399358", doc["rule-providers"]["openai"]["payload"]
+        )
+
+    def test_mapping_replaces_default_member(self) -> None:
+        doc = tower_document(
+            ["openai"], {"openai": SUMMARY}, mapping={"openai": "节点选择"}
+        )
+        group = doc["proxy-groups"][0]
+        self.assertEqual(group["proxies"], ["节点选择"])
+        self.assertTrue(group["include-all-proxies"])
+
+    def test_service_without_rules_is_skipped(self) -> None:
+        empty = {"domains": [], "processes": [], "ip_asns": [], "ip_cidrs": []}
+        doc = tower_document(["openai", "gemini"], {"openai": SUMMARY, "gemini": empty})
+        self.assertEqual(list(doc["rule-providers"]), ["openai"])
+        self.assertEqual(doc["rules"], ["RULE-SET,openai,AI-openai", "MATCH,AI"])
+        self.assertEqual([g["name"] for g in doc["proxy-groups"]], ["AI-openai", "AI"])
+
+    def test_no_services_raises(self) -> None:
+        empty = {"domains": [], "processes": [], "ip_asns": [], "ip_cidrs": []}
+        with self.assertRaises(ValueError):
+            tower_document(["gemini"], {"gemini": empty})
+
+
+class TowerEmitTests(unittest.TestCase):
+    """End-to-end: emit the Tower file, then re-check it the way verify does."""
+
+    def _emit(self, directory: str) -> dict:
+        from ai_rulec.emit import emit_all
+
+        catalog = {
+            "generated_at": "2026-11-23T00:00:00+00:00",
+            "domains": {
+                "api.openai.com": {"flags": [], "primary_service": "openai"},
+                "chatgpt.com": {"flags": [], "primary_service": "openai"},
+            },
+            "source_meta": {},
+        }
+        coverage = {
+            "services": {"openai": SUMMARY},
+            "summary": {},
+        }
+        return emit_all(
+            catalog,
+            coverage,
+            {"openai": {"display_name": "OpenAI"}},
+            directory,
+            strict=True,
+            formats=("tower",),
+        )
+
+    def test_emit_writes_one_self_contained_file(self) -> None:
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            lock = self._emit(directory)
+            self.assertEqual(lock["formats"], ["tower"])
+            self.assertEqual(list(lock["artifacts"]), ["tower/ai-rules.yaml"])
+            path = os.path.join(directory, "tower", "ai-rules.yaml")
+            with open(path, encoding="utf-8") as fh:
+                body = fh.read()
+            self.assertNotIn("type: file", body)
+            self.assertNotIn("./AI-Rules", body)
+
+    def test_verifier_rejects_file_providers(self) -> None:
+        import os
+        import tempfile
+
+        from ai_rulec.verify import verify_outputs
+
+        with tempfile.TemporaryDirectory() as directory:
+            self._emit(directory)
+            path = os.path.join(directory, "tower", "ai-rules.yaml")
+            with open(path, encoding="utf-8") as fh:
+                body = fh.read()
+            # The exact shape Tower's parser throws unsupportedSyntax on.
+            broken = body.replace(
+                "type: inline", "type: file", 1
+            ).replace("behavior: classical", "path: ./AI-Rules/openai.yaml", 1)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(broken)
+            report = verify_outputs(directory, {"services": {}, "summary": {}})
+            self.assertFalse(report["ok"])
+            self.assertTrue(
+                any("type:file" in error or "type inline" in error for error in report["errors"]),
+                report["errors"],
+            )
 
 
 if __name__ == "__main__":

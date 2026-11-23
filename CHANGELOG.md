@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.18.0] - 2026-11-23
+
+新增 `tower` 格式：一份自包含的 Clash 规则方案，直接导入 Tower。
+
+### Added
+
+- **`build --formats tower`**：生成 `out/tower/ai-rules.yaml`。每个服务一个 `AI-<service>` select 组（`include-all-proxies: true`），父组 `AI` 汇总，规则为 `RULE-SET,<service>,AI-<service>` + `MATCH,AI`。`--map <service>=<policy>` 可把初始成员换成已有策略；`--asn-mode drop` 生效。
+- **Tower 产物是单文件**：Tower 的 Clash 解析器只接受 `type: inline` 的 `rule-providers`，`type: file` + `path` 会抛 `unsupportedSyntax`；因此规则内联进 `payload`，不产出散装 provider 文件，也不依赖任何本地路径。
+- **`verify` 校验 Tower 产物**：每个 provider 必须是 `inline`、不得含 `url`/`path`/`header`/`headers`/`exclude-filter`、payload 行前缀合法、`RULE-SET` 的 provider 与目标组都存在、裸规则只允许 `MATCH`/`FINAL`；有 mihomo 时再跑一遍 `mihomo -t`（同一份文件 mihomo 也认）。
+- 用 Tower 自己的 `SchemeYAMLReader`（`parser.swift` 内实现）实测读取生成物：12 组 / 11 provider / 12 条规则全部解析成功。
+
+### Docs
+
+- README 增「Tower」客户端行与 `### Tower` 段：导入步骤（规则 → `+` → 文件，或 HTTPS 链接）、`include-all-proxies` 行为、`--map` 用法、沙盒限制。
+
 ## [0.17.2] - 2026-11-23
 
 跨平台 CI 从「三平台全红」修到「三平台全绿」。功能不变，修的是可移植性与测试隔离。

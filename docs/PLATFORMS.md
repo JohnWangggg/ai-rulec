@@ -8,7 +8,7 @@ ai-rulec 的跨平台层集中在 `ai_rulec/platforms.py`：目录约定、客�
 
 | 能力 | macOS | Linux | Windows |
 |---|---|---|---|
-| 构建与产物（`build`，mihomo / sing-box / Surge） | ✓ 已实机验证 | 已实现，未在真机验证 | 已实现，未在真机验证 |
+| 构建与产物（`build`，mihomo / sing-box / Surge / Tower） | ✓ 已实机验证 | 已实现，未在真机验证 | 已实现，未在真机验证 |
 | 探测与健康检查（`probe`、`health`、`status --health`） | ✓ 已实机验证 | 已实现，未在真机验证 | 已实现，未在真机验证 |
 | `apply` 到 FlClash / mihomo | ✓ 已实机验证（FlClash + 真实流量） | 未在真机验证 | 未在真机验证 |
 | sing-box / Hiddify 补丁（`singbox`、`singbox-watch`） | 已支持；Hiddify 实机写入未启用（副本端到端已验证） | 未在真机验证 | 未在真机验证 |
@@ -16,6 +16,7 @@ ai-rulec 的跨平台层集中在 `ai_rulec/platforms.py`：目录约定、客�
 | 一键安装器 | ✓ `install.command`（双击）—— 它串起的各步骤均已在本机跑通，脚本本身未整段复跑 | `scripts/install.sh`，未在真机验证 | `scripts/install.ps1`，未在真机验证 |
 | 本地 Web 控制台（`ui`） | ✓ 已实机验证 | 已实现，未在真机验证 | 已实现，未在真机验证 |
 | Surge（`surge` 子命令） | 已支持，profile 副本验证通过 | 不适用（无 `surge-cli`） | 不适用（无 `surge-cli`） |
+| Tower（`build --formats tower`） | 已用 Tower 自己的 YAML 读取器验证产物 | 产物平台无关 | 产物平台无关 |
 
 图例：✓ = 在本仓库的发布记录里有可复现的实机结果；「未在真机验证」= 代码路径已就绪、单元测试覆盖，但没有真实硬件/真实客户端的端到端证据；「不适用」= 目标程序在该系统上不存在。
 

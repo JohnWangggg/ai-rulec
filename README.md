@@ -7,13 +7,13 @@
 `ai-rulec` 负责把这两件事自动化：
 
 1. **聚合清洗多个开源规则库**：拉取 v2fly、Loyalsoldier、blackmatrix7 等 7 个开源规则源，剔除共享域名、过宽 ASN 和未知归属的条目，按 OpenAI、Anthropic、Google AI、Cursor 等服务分别整理，并可先探测域名连通性。
-2. **生成规则并安全写进客户端**：一份数据同时输出 mihomo / FlClash、sing-box / Hiddify 和 Surge 格式；写入前先用对应内核（`mihomo -t`、`sing-box check`、`surge-cli --check`）校验，自动备份原配置，mihomo 系客户端可用 `rollback` 一键恢复。
+2. **生成规则并安全写进客户端**：一份数据同时输出 mihomo / FlClash、sing-box / Hiddify、Surge 和 Tower 规则方案；写入前先用对应内核（`mihomo -t`、`sing-box check`、`surge-cli --check`）校验，自动备份原配置，mihomo 系客户端可用 `rollback` 一键恢复。
 3. **订阅更新后自动补回**：后台监控配置文件，一旦更新订阅把 `AI-*` 策略组或规则冲掉，自动重新写入；FlClash 侧还会一并修复 provider 缓存。
 4. **顺手检查 AI 工具通不通**：内置 Claude Code、Codex、Gemini CLI 等 7 个常用 AI 工具的连通性检查，也带一个本机网页控制台（`ai-rulec ui`）方便看状态和手动操作。
 
 > **它不是什么**：不是规则仓库（仓库本身不含第三方规则文件），不提供代理节点或订阅，也不托管 API Key 或账号。你照常在代理软件里选节点，它只负责把 AI 分流规则管好。
 
-当前为 **alpha** 版本：主力完整支持 **macOS + FlClash / mihomo**（写入、修缓存、后台防覆盖、本地控制台均已实机验证）；**sing-box / Hiddify** 与 **Surge** 支持同源规则导出和配置补丁；Linux / Windows 的安装与后台服务代码已就位，尚未真机验证。许可证为 **GPL-3.0-or-later**，第三方来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
+当前为 **alpha** 版本：主力完整支持 **macOS + FlClash / mihomo**（写入、修缓存、后台防覆盖、本地控制台均已实机验证）；**sing-box / Hiddify**、**Surge** 与 **Tower** 支持同源规则导出和配置补丁；Linux / Windows 的安装与后台服务代码已就位，尚未真机验证。许可证为 **GPL-3.0-or-later**，第三方来源与分发注意事项见 [docs/THIRD_PARTY.md](docs/THIRD_PARTY.md)。
 
 ## 系统支持
 
@@ -84,7 +84,7 @@ export SOURCE_ROOT="$PWD/.sources"
 #    探针默认走本机代理（proxy auto），否则 CN 直连会把可用的 AI 域名判成 tls_fail
 ai-rulec build --asn-mode drop --probe --probe-proxy auto
 
-# 一次出齐 mihomo / sing-box / Surge 三套产物
+# 一次出齐 mihomo / sing-box / Surge / Tower 四套产物
 ai-rulec build --asn-mode drop --probe --probe-proxy auto --formats all
 
 # 4. 检查当前 FlClash profile 和 provider cache
@@ -138,7 +138,7 @@ ai-rulec service uninstall              # 停止并移除
 | `doctor` | 检查并可选修复 hashed provider cache | `--fix`、`--dry-run` |
 | `apply` | 合并进真实 profile，备份、拷贝 provider、mihomo 验证、原子写 | `--dry-run`、`--rules-last`、`--reset-proxies`、`--no-repair-cache` |
 | `watch` | 轮询 config/profile，重放丢失的 AI 组、修 cache、周期健康检查 | `--once`、`--no-reapply`、`--no-fix-cache`、`--health` |
-| `verify` | 校验 `out/` 里的 mihomo / sing-box / Surge 产物与 provider 是否自洽 | `--out` |
+| `verify` | 校验 `out/` 里的 mihomo / sing-box / Surge / Tower 产物与 provider 是否自洽 | `--out` |
 | `rollback` | 恢复 apply 前的 profile/AI-Rules | `--list`、`--dry-run` |
 | `merge` | 只合并 base + meta，不碰 FlClash 数据目录 | `--target`、`--map` |
 | `surge` | 把 AI 组/规则补丁进现有 Surge profile，`surge-cli --check` 通过后才原子写 | `--dry-run`、`--rules-last`、`--no-backup` |
@@ -155,6 +155,7 @@ ai-rulec service uninstall              # 停止并移除
 | `mihomo`（默认） | `out/AI-Rules/*.yaml`、`out/mihomo-meta.yaml`、`out/mihomo-config.yaml` | mihomo / FlClash / Clash Verge |
 | `sing-box` | `out/singbox/AI-Rules/*.json`（rule-set v3）、`out/singbox/config.json` | sing-box / Hiddify / SFA |
 | `surge` | `out/surge/AI-Rules/*.list`、`out/surge/fragment.conf`、`out/surge/profile.conf` | Surge（`.list` 可直接被 `RULE-SET,路径,策略` 引用） |
+| `tower` | `out/tower/ai-rules.yaml` | Tower（规则方案导入；单文件、inline provider） |
 | `all` | 以上全部 | — |
 
 sing-box 没有 ASN 匹配器，`ip_asn` 会被丢弃（`asn_mode` 对 sing-box 无效）；Surge 的 `.list` 保留 `IP-ASN`。
@@ -175,6 +176,27 @@ sing-box 没有 ASN 匹配器，`ip_asn` 会被丢弃（`asn_mode` 对 sing-box 
 | mihomo / FlClash | `apply`、`watch`、`doctor` | 直接改 profile + hashed provider cache，`mihomo -t` 通过后原子写 | macOS 实机已验证；Linux / Windows 未在真机验证 |
 | sing-box / Hiddify | `singbox`、`singbox-watch` | 补丁 `route.rules` 与 `AI-*` selector，`sing-box check` 通过后原子写 | macOS 副本端到端验证；Hiddify 实机写入**未启用**（先用 `--dry-run`）；Linux / Windows 未在真机验证 |
 | Surge | `surge` | 定点 patch `[Proxy Group]`/`[Rule]`，`.list` 复制到 profile 同目录，`surge-cli --check` 通过后原子写 | macOS 已支持（需本机 `surge-cli`）；Linux / Windows 无该工具，不适用 |
+| Tower | `build --formats tower` | 生成单文件规则方案，在 Tower 里「规则 → + → 文件」导入；Tower 沙盒不能读散装 provider 文件 | iOS / iPadOS / macOS |
+
+### Tower
+
+[Tower](https://github.com/pengchujin/tower) 是管理订阅、节点和规则方案的原生 App，自己不建连接。它读 Clash 规则方案的解析器只接受 `type: inline` 的 `rule-providers`：`type: file` + `path` 会直接抛 `unsupportedSyntax`。所以 Tower 产物是**单文件自包含**的，规则内联在 `payload` 里：
+
+```bash
+python3 -m ai_rulec build --formats tower --asn-mode drop
+# out/tower/ai-rules.yaml
+```
+
+导入：Tower → 规则 → `+` → 文件 → 选 `out/tower/ai-rules.yaml`。也可以把文件放到任意 HTTPS 地址后粘贴链接（Tower 只收 HTTPS，网页地址会自动转 raw，上限 8 MB）。
+
+行为：
+
+- 每个服务一个 `AI-<service>` select 组，带 `include-all-proxies: true`，导入后自动绑定你在 Tower 里勾选的节点；
+- 父组 `AI` 汇总所有服务组，`rules` 是 `RULE-SET,<service>,AI-<service>` 加 `MATCH,AI`；
+- `--map openai=某策略` 把该服务的初始成员换成 Tower 里已有的策略名（Tower 导入时校验策略必须存在）；
+- `verify` 会检查每个 provider 都是 inline、没有 `url`/`path`/`header`/`exclude-filter`、payload 行前缀合法，并在有 mihomo 时额外跑一遍 `mihomo -t`（同一份文件 mihomo 也认）。
+
+Tower 的沙盒只能读它自己容器里的文件，所以**不要**指望 `apply`/`watch` 这类写客户端配置的命令对它生效；它的接口就是这份 YAML。
 
 ### Surge
 
@@ -278,8 +300,8 @@ JSON 形态是 `{"ok": null, "skipped": "<原因>", "agents": [], "summary": {..
 ai_rulec/
   sources.py    # 解析 Clash/Surge/V2Ray/YAML，两阶段过滤
   catalog.py    # 归属、角色、flags、coverage、probe 聚合
-  emit.py       # 严格发射、mihomo/sing-box/Surge 产物、lock
-  formats.py    # sing-box rule-set 与 Surge list/patch 的文本生成
+  emit.py       # 严格发射、mihomo/sing-box/Surge/Tower 产物、lock
+  formats.py    # sing-box rule-set、Surge list/patch、Tower rule scheme 的文本生成
   surge.py      # Surge profile 发现、备份、校验、原子写
   singbox.py    # sing-box/Hiddify config patch、fork 字段清洗、校验
   singbox_watch.py  # 订阅刷新后自动重打 Hiddify 补丁

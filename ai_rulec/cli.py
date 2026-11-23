@@ -92,7 +92,9 @@ def _build(args: argparse.Namespace) -> int:
         raise SystemExit(f"{services_path}: no services")
 
     formats = tuple(
-        ("mihomo", "sing-box", "surge") if "all" in args.formats else args.formats
+        ("mihomo", "sing-box", "surge", "tower")
+        if "all" in args.formats
+        else args.formats
     )
     # build always means "write here, now": only an explicit --out moves it.
     # Reading commands use paths.resolve_out(), which also knows the last build.
@@ -163,6 +165,8 @@ def _build(args: argparse.Namespace) -> int:
         report["outputs"]["singbox"] = os.path.join(args.out, "singbox")
     if "surge" in formats:
         report["outputs"]["surge"] = os.path.join(args.out, "surge")
+    if "tower" in formats:
+        report["outputs"]["tower"] = os.path.join(args.out, "tower")
     if os.path.exists(probe_path):
         report["outputs"]["probes"] = probe_path
     if not args.skip_verify:
@@ -1046,7 +1050,7 @@ def main(argv: list[str] | None = None) -> int:
     build.add_argument(
         "--formats",
         nargs="+",
-        choices=("mihomo", "sing-box", "surge", "all"),
+        choices=("mihomo", "sing-box", "surge", "tower", "all"),
         default=["mihomo"],
         help="client formats to emit (default: mihomo; 'all' = every format)",
     )

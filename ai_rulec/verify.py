@@ -155,6 +155,98 @@ def _verify_surge(outdir: str, errors: list[str], checks: dict[str, Any]) -> Non
         errors.append(f"surge-cli --check error: {exc}")
 
 
+def _verify_tower(outdir: str, errors: list[str], checks: dict[str, Any]) -> None:
+    """Check the Tower scheme against the constraints its Clash reader enforces."""
+    path = os.path.join(outdir, "tower", "ai-rules.yaml")
+    if not os.path.exists(path):
+        errors.append("missing tower/ai-rules.yaml")
+        return
+    try:
+        document = _load_yaml(path)
+    except yaml.YAMLError as exc:
+        errors.append(f"tower/ai-rules.yaml: {exc}")
+        return
+    if not isinstance(document, dict):
+        errors.append("tower/ai-rules.yaml is not a mapping")
+        return
+
+    providers = document.get("rule-providers") or {}
+    groups = document.get("proxy-groups") or []
+    rules = document.get("rules") or []
+    checks["tower"] = {
+        "providers": len(providers),
+        "groups": len(groups),
+        "rules": len(rules),
+    }
+    if not providers:
+        errors.append("tower: no rule-providers")
+    if not groups:
+        errors.append("tower: no proxy-groups (Tower rejects a scheme without groups)")
+    if not rules:
+        errors.append("tower: no rules (Tower rejects a scheme without rules)")
+
+    group_names = {g.get("name") for g in groups if isinstance(g, dict)}
+    for name, provider in providers.items():
+        if not isinstance(provider, dict):
+            errors.append(f"tower: provider {name} is not a mapping")
+            continue
+        if provider.get("type") != "inline":
+            errors.append(
+                f"tower: provider {name} must be type inline "
+                "(Tower cannot read type:file providers)"
+            )
+        for forbidden in ("url", "path", "header", "headers", "exclude-filter"):
+            if forbidden in provider:
+                errors.append(f"tower: provider {name} carries unsupported '{forbidden}'")
+        payload = provider.get("payload") or []
+        if not payload:
+            errors.append(f"tower: provider {name} has an empty payload")
+        for line in payload:
+            if not isinstance(line, str) or not line.startswith(ALLOWED_PREFIXES):
+                errors.append(f"tower: provider {name} has an unsupported line: {line!r}")
+
+    for rule in rules:
+        if not isinstance(rule, str):
+            errors.append(f"tower: rule is not a string: {rule!r}")
+            continue
+        fields = [f.strip() for f in rule.split(",")]
+        if fields[0].upper() == "RULE-SET":
+            if len(fields) < 3:
+                errors.append(f"tower: malformed rule: {rule}")
+                continue
+            if fields[1] not in providers:
+                errors.append(f"tower: rule references unknown provider: {fields[1]}")
+            if fields[2] not in group_names and fields[2].upper() not in (
+                "DIRECT",
+                "REJECT",
+            ):
+                errors.append(f"tower: rule targets unknown group: {fields[2]}")
+        elif fields[0].upper() not in ("MATCH", "FINAL"):
+            errors.append(f"tower: bare rule is not Tower-importable: {rule}")
+
+    mihomo, hint = mihomo_binary()
+    if not mihomo:
+        checks["tower"]["mihomo"] = {"status": "skipped", "reason": hint}
+        return
+    try:
+        proc = subprocess.run(
+            [mihomo, "-t", "-f", os.path.abspath(path)],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        checks["tower"]["mihomo"] = {"status": "error", "reason": str(exc)}
+        errors.append(f"mihomo -t (tower) error: {exc}")
+        return
+    checks["tower"]["mihomo"] = {
+        "status": "ok" if proc.returncode == 0 else "failed",
+        "returncode": proc.returncode,
+    }
+    if proc.returncode != 0:
+        errors.append(f"mihomo -t rejected tower/ai-rules.yaml: {proc.stderr[-400:]}")
+
+
 def _collect_warnings(
     coverage: dict[str, Any],
     probes: dict[str, Any] | None,
@@ -242,6 +334,8 @@ def verify_outputs(
         _verify_singbox(outdir, errors, checks)
     if "surge" in formats:
         _verify_surge(outdir, errors, checks)
+    if "tower" in formats:
+        _verify_tower(outdir, errors, checks)
     if "mihomo" not in formats:
         return _mihomo_less_report(errors, warnings, checks, coverage, probes)
 
