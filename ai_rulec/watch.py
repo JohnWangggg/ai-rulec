@@ -277,7 +277,13 @@ def _agent_health_block(
     port = result.get("port")
     proxy_url = f"http://127.0.0.1:{port}" if port else None
     if proxy_url and _port_open(port) is False:
-        proxy_url = None
+        # The client is closed.  Sampling every agent over the direct route
+        # would burn a timeout each and report failures that describe the
+        # route, not the agents, so wait for the proxy to come back.
+        health = {"ok": None, "skipped": f"{proxy_url} is not listening"}
+        result["health"] = health
+        result["warnings"].append(f"agent health skipped: {health['skipped']}")
+        return health
 
     job = {"done": False, "report": None, "error": None, "proxy": proxy_url}
 
@@ -709,8 +715,10 @@ def _format_result(result: dict[str, Any]) -> str:
         )
         if health.get("down_agents"):
             bits.append("down=" + ",".join(health["down_agents"][:3]))
+    elif health.get("skipped"):
+        bits.append("agents=skipped")
     elif health.get("error"):
-        bits.append(f"agents=error")
+        bits.append("agents=error")
     if result.get("restart_required"):
         bits.append("restart=required")
     if result.get("errors"):

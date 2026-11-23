@@ -7,7 +7,7 @@ from typing import Any
 import yaml
 
 from . import defaults
-from .health import check_agents, load_agents
+from .health import check_agents, load_agents, proxy_skip
 from .profile import (
     _runtime_config,
     inspect_profile,
@@ -115,27 +115,31 @@ def profile_status(
 
     health: dict[str, Any] | None = None
     if check_agents_run:
-        health = _agent_health(
-            agents_path,
-            agent_names,
-            proxy_url=proxy_url,
-            timeout=timeout,
-            workers=workers,
-        )
+        skip = proxy_skip(proxy_url)
+        if skip:
+            health = {"ok": None, "skipped": skip, "proxy": proxy_url}
+            warnings.append(f"agent health skipped: {skip}")
+        else:
+            health = _agent_health(
+                agents_path,
+                agent_names,
+                proxy_url=proxy_url,
+                timeout=timeout,
+                workers=workers,
+            )
+        summary = health.get("summary") or {}
         if health.get("error"):
             warnings.append(f"agent health: {health['error']}")
-        else:
-            summary = health.get("summary") or {}
-            if summary.get("down"):
-                warnings.append(
-                    f"agents down: {summary['down']} "
-                    f"({', '.join(health.get('down_agents') or [])})"
-                )
-            if summary.get("degraded"):
-                warnings.append(
-                    f"agents degraded: {summary['degraded']} "
-                    f"({', '.join(health.get('degraded_agents') or [])})"
-                )
+        elif summary.get("down"):
+            warnings.append(
+                f"agents down: {summary['down']} "
+                f"({', '.join(health.get('down_agents') or [])})"
+            )
+        if not health.get("skipped") and summary.get("degraded"):
+            warnings.append(
+                f"agents degraded: {summary['degraded']} "
+                f"({', '.join(health.get('degraded_agents') or [])})"
+            )
 
     healthy = bool(
         info.get("managed")

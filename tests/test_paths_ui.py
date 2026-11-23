@@ -74,6 +74,14 @@ class UiTests(unittest.TestCase):
         self.assertFalse(result["ok"])
         self.assertIn("unknown action", result["error"])
 
+    def test_health_payload_marks_a_closed_route_as_skipped(self):
+        with mock.patch.object(
+            ui, "_health", return_value={"ok": None, "skipped": "x is not listening"}
+        ):
+            payload = ui._health_payload()
+        self.assertIsNone(payload["ok"])
+        self.assertIn("is not listening", payload["skipped"])
+
     def test_state_falls_back_when_no_profile(self):
         with mock.patch.object(ui, "_latest_profile", return_value=None):
             self.assertEqual(ui._state()["ok"], False)

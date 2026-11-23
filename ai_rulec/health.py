@@ -493,3 +493,18 @@ def port_open(proxy_url: str | None, timeout: float = 0.5) -> bool | None:
             return True
     except OSError:
         return False
+
+
+def proxy_skip(proxy_url: str | None, timeout: float = 0.5) -> str | None:
+    """Reason agent checks must wait, or None when the route is usable.
+
+    A resolved-but-dead proxy is the normal state when the client is closed.
+    Checking every agent over the direct route then costs a full timeout per
+    endpoint and reports failures that say nothing about the client, so the
+    caller skips the sweep and says why instead.
+    """
+    if not proxy_url:
+        return None
+    if port_open(proxy_url, timeout=timeout):
+        return None
+    return f"{proxy_url} is not listening"

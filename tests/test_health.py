@@ -3,8 +3,10 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import socket
 import tempfile
 import threading
+import time
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -18,8 +20,10 @@ from ai_rulec.health import (
     check_http,
     diagnose,
     load_agents,
+    proxy_skip,
     proxy_url_from_config,
 )
+from ai_rulec.status import profile_status
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -236,3 +240,84 @@ class HealthTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProxySkipTests(unittest.TestCase):
+    """A resolved-but-dead proxy must skip the sweep, not fall back to direct."""
+
+    def test_closed_port_reports_a_reason(self) -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        # Port was bound then released: nothing listens on it now.
+        reason = proxy_skip(f"http://127.0.0.1:{port}")
+        self.assertIn("is not listening", reason or "")
+
+    def test_open_port_and_direct_route_are_allowed(self) -> None:
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            self.assertIsNone(
+                proxy_skip(f"http://127.0.0.1:{server.server_port}")
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=2)
+        self.assertIsNone(proxy_skip(None))
+
+    def test_cli_health_skips_instead_of_probing_directly(self) -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        dead = f"http://127.0.0.1:{port}"
+        output = io.StringIO()
+        started = time.monotonic()
+        with contextlib.redirect_stdout(output):
+            code = main(["health", "--proxy", dead, "--timeout", "8", "--json"])
+        elapsed = time.monotonic() - started
+        payload = json.loads(output.getvalue())
+        self.assertEqual(code, 2)
+        self.assertIsNone(payload["ok"])
+        self.assertIn("is not listening", payload["skipped"])
+        self.assertEqual(payload["agents"], [])
+        self.assertLess(elapsed, 5.0, "health still probed every agent")
+
+
+class StatusSkipTests(unittest.TestCase):
+    def test_status_reports_skipped_agents_when_proxy_is_down(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            profile = root / "profiles" / "demo.yaml"
+            profile.parent.mkdir(parents=True)
+            profile.write_text(
+                yaml.safe_dump(
+                    {"proxies": [], "proxy-groups": [], "rules": []},
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            (root / "config.yaml").write_text(
+                yaml.safe_dump({"mixed-port": 65001}, sort_keys=False),
+                encoding="utf-8",
+            )
+            agents = root / "agents.yaml"
+            agents.write_text(
+                yaml.safe_dump(
+                    {"agents": [{"id": "demo", "checks": []}]}, sort_keys=False
+                ),
+                encoding="utf-8",
+            )
+            report = profile_status(
+                str(profile),
+                agents_path=str(agents),
+                proxy_url="http://127.0.0.1:64999",
+                check_agents_run=True,
+            )
+        self.assertEqual(report["health"]["ok"], None)
+        self.assertIn("is not listening", report["health"]["skipped"])
+        self.assertTrue(
+            any("agent health skipped" in w for w in report["warnings"]),
+            report["warnings"],
+        )

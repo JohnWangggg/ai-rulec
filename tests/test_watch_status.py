@@ -143,8 +143,12 @@ class HealthSweepTests(unittest.TestCase):
             original = (
                 watch_module._check_agents,
                 watch_module._load_agents,
+                watch_module._port_open,
             )
             watch_module._load_agents = lambda path: {"demo": {"id": "demo"}}
+            # This test is about the sweep staying off the loop, so pretend a
+            # client is listening instead of shipping a real proxy.
+            watch_module._port_open = lambda port, timeout=0.35: True
 
             def slow(agents, names, *, proxy_url=None, timeout=6.0):
                 time.sleep(1.0)
@@ -196,7 +200,11 @@ class HealthSweepTests(unittest.TestCase):
                 self.assertEqual(state["last_health"]["summary"]["ok"], 1)
                 self.assertNotIn("checked_at", state["last_health"])
             finally:
-                watch_module._check_agents, watch_module._load_agents = original
+                (
+                    watch_module._check_agents,
+                    watch_module._load_agents,
+                    watch_module._port_open,
+                ) = original
                 watch_module._HEALTH_JOBS.pop(str(state_file), None)
 
 
@@ -228,3 +236,47 @@ class FollowActiveTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WatchHealthSkipTests(unittest.TestCase):
+    def test_closed_proxy_skips_the_sweep(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, profile = make_home(Path(tmp))
+            (root / "config.yaml").write_text(
+                yaml.safe_dump({"mixed-port": 65002}, sort_keys=False),
+                encoding="utf-8",
+            )
+            agents = root / "agents.yaml"
+            agents.write_text(
+                yaml.safe_dump(
+                    {"agents": [{"id": "demo", "checks": []}]}, sort_keys=False
+                ),
+                encoding="utf-8",
+            )
+            original = watch_module._check_agents
+            calls: list[int] = []
+
+            def counted(*args, **kwargs):
+                calls.append(1)
+                return {
+                    "agents": [],
+                    "summary": {"total": 0, "ok": 0, "degraded": 0, "down": 0},
+                }
+
+            watch_module._check_agents = counted
+            try:
+                result = reconcile_once(
+                    str(profile),
+                    reapply=False,
+                    settle=0,
+                    state_path=str(root / "watch.json"),
+                    agents_path=str(agents),
+                    check_agent_health=True,
+                    agents_interval=0.0,
+                )
+            finally:
+                watch_module._check_agents = original
+                watch_module._HEALTH_JOBS.pop(str(root / "watch.json"), None)
+        self.assertEqual(calls, [], "checked agents although the proxy is closed")
+        self.assertIn("is not listening", result["health"]["skipped"])
+        self.assertIsNone(result["health"]["ok"])

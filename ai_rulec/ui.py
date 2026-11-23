@@ -142,6 +142,21 @@ def _health(force: bool = False) -> dict[str, object]:
     return data
 
 
+def _health_payload(force: bool = False) -> dict[str, object]:
+    """``/api/health`` body: always carry ``ok`` and ``skipped``.
+
+    The child exits 2 when it skipped the sweep because the proxy route is
+    down; the JSON still parses, so the page can say "the client is not
+    running" instead of rendering 0 ok / 0 down as if every agent passed.
+    """
+    data = dict(_health(force))
+    data.setdefault("ok", None)
+    data.setdefault("skipped", None)
+    if "error" in data and data["ok"] is None:
+        data["ok"] = False
+    return data
+
+
 def _run_action(action: str) -> dict[str, object]:
     argv = ACTIONS.get(action)
     if argv is None:
@@ -278,8 +293,10 @@ async function loadState() {
 async function loadHealth(force=false) {
   const r = await api('/api/health' + (force ? '?force=1' : ''));
   const h = await r.json();
-  $('health-at').textContent = h.ok === undefined ? '不可用' : `${h.summary?.ok ?? 0} ok / ${h.summary?.degraded ?? 0} 降级 / ${h.summary?.down ?? 0} 断开`;
-  $('agents').innerHTML = (h.agents || []).map((a) =>
+  $('health-at').textContent = h.skipped ? '客户端未运行' : (h.ok === undefined || h.ok === null ? '不可用' : `${h.summary?.ok ?? 0} ok / ${h.summary?.degraded ?? 0} 降级 / ${h.summary?.down ?? 0} 断开`);
+  $('agents').innerHTML = h.skipped
+    ? `<tr><td colspan="3" style="color:var(--muted)">${esc(h.skipped)}</td></tr>`
+    : (h.agents || []).map((a) =>
     `<tr><td>${esc(a.display_name || a.name)}</td><td>${dot(a.status)}</td><td class="sub">${esc(a.reason || '')}</td></tr>`).join('')
     || '<tr><td colspan="3" style="color:var(--muted)">无可检查的 agent</td></tr>';
 }
@@ -357,7 +374,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(_state())
         elif path == "/api/health":
             force = (parse_qs(urlparse(self.path).query).get("force") or ["0"])[0] == "1"
-            self._json(_health(force))
+            self._json(_health_payload(force))
         else:
             self._json({"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
 

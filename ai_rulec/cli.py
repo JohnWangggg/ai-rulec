@@ -15,7 +15,14 @@ from . import __version__, defaults, paths
 from . import service as service_backend
 from .catalog import build_catalog
 from .emit import emit_all
-from .health import check_agents, diagnose, load_agents, port_open, resolve_proxy_url
+from .health import (
+    check_agents,
+    diagnose,
+    load_agents,
+    port_open,
+    proxy_skip,
+    resolve_proxy_url,
+)
 from .merge import merge_profile, parse_target_map
 from .probe import load_probes, probe_domains
 from .profile import (
@@ -53,6 +60,15 @@ def _latest_profile(discovered: dict[str, Any], command: str) -> str:
     if picked is None:
         raise SystemExit(f"{command}: no profiles discovered")
     return str(picked["path"])
+
+
+def _health_proxy(value: str) -> str | None:
+    """Resolve --proxy without deciding whether the route is alive."""
+    if not value or value == "direct":
+        return None
+    if value != "auto":
+        return value
+    return resolve_proxy_url()
 
 
 def _probe_proxy(value: str) -> str | None:
@@ -692,7 +708,10 @@ def _status(args: argparse.Namespace) -> int:
     try:
         proxy_url = None
         if args.health:
-            proxy_url = _probe_proxy(args.proxy)
+            # Pass the resolved route through even when the port is closed so
+            # profile_status can report "skipped" instead of falling back to
+            # a direct sweep that only measures timeouts.
+            proxy_url = _health_proxy(args.proxy)
         report = profile_status(
             profile,
             state_path=args.state,
@@ -752,7 +771,9 @@ def _status(args: argparse.Namespace) -> int:
     )
     health = report.get("health")
     if health:
-        if health.get("error"):
+        if health.get("skipped"):
+            print(f"agents:  skipped ({health['skipped']})")
+        elif health.get("error"):
             print(f"agents:  error ({health['error']})")
         else:
             summary = health.get("summary") or {}
@@ -800,14 +821,26 @@ def _health(args: argparse.Namespace) -> int:
     else:
         proxy_url = args.proxy
 
-    if proxy_url and not port_open(proxy_url):
-        # Same policy as the watcher: a configured-but-dead proxy is worse than
-        # no proxy, because every check burns its timeout twice.
-        print(
-            f"health: {proxy_url} is not listening; checking directly",
-            file=sys.stderr,
-        )
-        proxy_url = None
+    skip = proxy_skip(proxy_url)
+    if skip:
+        # Never switch routes behind the user's back: a resolved-but-dead proxy
+        # means the client is closed, and a direct sweep would report timeouts
+        # that say nothing about the agents.
+        report = {
+            "ok": None,
+            "skipped": skip,
+            "proxy": proxy_url,
+            "proxy_url": proxy_url,
+            "proxy_open": False,
+            "agents": [],
+            "summary": {"total": 0, "ok": 0, "degraded": 0, "down": 0},
+        }
+        if args.json:
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print(f"health:  skipped ({skip})")
+            print("summary: no checks run; the proxy route is unavailable")
+        return 2
 
     proxy_state = port_open(proxy_url) if proxy_url else None
     try:

@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.17.1] - 2026-11-23
+
+客户端关闭时不再用假失败换取假信号。
+
+### Fixed
+
+- **`status --health` / `health` 不再静默改走直连**：`--proxy auto` 解析到代理端口后，若端口未监听，原先会回落直连逐个 agent 探测。7 个 agent × 多端点 × 重试耗时 72 秒，最终报 5 个 `down` —— 这些失败只说明客户端没运行。现在直接跳过本轮并说明原因（`agents: skipped (<url> is not listening)`），实测 0.5 秒返回；`health` 的 `--json` 输出 `{"ok": null, "skipped": ...}`，退出码 2。
+- 显式 `--proxy direct` 仍然照常检查：直连是用户指定的路由，不是回退。
+- `watch` 的 agent 扫描同样跳过，结果行显示 `agents=skipped`，不再把直连超时写成 `down=`。
+- 网页控制台在跳过时显示「客户端未运行」而不是「0 ok / 0 降级 / 5 断开」。
+
 ## [0.17.0] - 2026-11-23
 
 按 `docs/AUDIT.md` 整改。三条 P0 都是真实的阻断问题，全部已修。
