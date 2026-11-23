@@ -227,6 +227,16 @@ class TowerEmitTests(unittest.TestCase):
             self.assertNotIn("type: file", body)
             self.assertNotIn("./AI-Rules", body)
 
+    def test_lock_artifact_keys_are_posix(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            lock = self._emit(directory)
+            for key in lock["artifacts"]:
+                # Windows builds used to leak `tower\ai-rules.yaml` into the lock.
+                self.assertNotIn("\\", key)
+            self.assertEqual(list(lock["artifacts"]), ["tower/ai-rules.yaml"])
+
     def test_verifier_rejects_file_providers(self) -> None:
         import os
         import tempfile

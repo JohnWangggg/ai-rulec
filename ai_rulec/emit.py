@@ -31,6 +31,11 @@ def _sha256(path: str) -> str:
     return h.hexdigest()
 
 
+def _rel(path: str, outdir: str) -> str:
+    """Lock keys must be portable: Windows would otherwise write backslashes."""
+    return os.path.relpath(path, outdir).replace(os.sep, "/")
+
+
 def _dump_yaml(data: Any) -> str:
     return yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=120)
 
@@ -205,8 +210,8 @@ def emit_all(
             _write_provider(
                 domain_path, service, summary, "domain", generated_at, note, asn_mode
             )
-            artifacts[os.path.relpath(classical_path, outdir)] = _sha256(classical_path)
-            artifacts[os.path.relpath(domain_path, outdir)] = _sha256(domain_path)
+            artifacts[_rel(classical_path, outdir)] = _sha256(classical_path)
+            artifacts[_rel(domain_path, outdir)] = _sha256(domain_path)
 
             provider_entries[service] = {
                 "type": "file",
@@ -227,7 +232,7 @@ def emit_all(
             with open(sb_path, "w", encoding="utf-8") as fh:
                 fh.write(singbox_header(service, summary, generated_at))
                 fh.write(dump_singbox(singbox_document(service, summary, asn_mode)))
-            artifacts[os.path.relpath(sb_path, outdir)] = _sha256(sb_path)
+            artifacts[_rel(sb_path, outdir)] = _sha256(sb_path)
 
         if "surge" in formats:
             surge_path = os.path.join(surge_dir, f"{service}.list")
@@ -235,7 +240,7 @@ def emit_all(
                 fh.write(
                     surge_list_text(service, summary, generated_at, "classical", asn_mode)
                 )
-            artifacts[os.path.relpath(surge_path, outdir)] = _sha256(surge_path)
+            artifacts[_rel(surge_path, outdir)] = _sha256(surge_path)
 
     if "sing-box" in formats:
         singbox_config: dict[str, Any] = {
@@ -258,13 +263,13 @@ def emit_all(
         sb_config_path = os.path.join(outdir, "singbox", "config.json")
         with open(sb_config_path, "w", encoding="utf-8") as fh:
             fh.write(dump_singbox(singbox_config))
-        artifacts[os.path.relpath(sb_config_path, outdir)] = _sha256(sb_config_path)
+        artifacts[_rel(sb_config_path, outdir)] = _sha256(sb_config_path)
 
     if "surge" in formats:
         surge_fragment_path = os.path.join(outdir, "surge", "fragment.conf")
         with open(surge_fragment_path, "w", encoding="utf-8") as fh:
             fh.write(surge_fragment(service_names, "Proxy"))
-        artifacts[os.path.relpath(surge_fragment_path, outdir)] = _sha256(
+        artifacts[_rel(surge_fragment_path, outdir)] = _sha256(
             surge_fragment_path
         )
         surge_profile_path = os.path.join(outdir, "surge", "profile.conf")
@@ -274,7 +279,7 @@ def emit_all(
                     service_names, "PROXY", generated_at=generated_at
                 )
             )
-        artifacts[os.path.relpath(surge_profile_path, outdir)] = _sha256(
+        artifacts[_rel(surge_profile_path, outdir)] = _sha256(
             surge_profile_path
         )
 
@@ -294,7 +299,7 @@ def emit_all(
                 )
                 + _dump_yaml(document)
             )
-        artifacts[os.path.relpath(tower_path, outdir)] = _sha256(tower_path)
+        artifacts[_rel(tower_path, outdir)] = _sha256(tower_path)
 
     if "mihomo" in formats:
         service_groups = [
