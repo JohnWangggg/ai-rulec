@@ -125,6 +125,60 @@ def inspect_profile(path: str | Path) -> dict[str, Any]:
     }
 
 
+def _flclash_active_id() -> str | None:
+    """Read the profile id FlClash currently has selected.
+
+    FlClash keeps it in ``flutter.config`` (a JSON string) inside the macOS
+    preferences plist. Windows/Linux builds store the same key elsewhere, so a
+    missing file just means "unknown" and the caller falls back.
+    """
+    plist = platforms.home() / "Library" / "Preferences" / "com.follow.clash.plist"
+    if not plist.is_file():
+        return None
+    try:
+        import json
+        import plistlib
+
+        payload = plistlib.loads(plist.read_bytes()).get("flutter.config")
+        if isinstance(payload, bytes):
+            payload = payload.decode("utf-8", "replace")
+        if not isinstance(payload, str):
+            return None
+        value = json.loads(payload).get("currentProfileId")
+    except (OSError, ValueError, TypeError):
+        return None
+    return str(value) if value else None
+
+
+def _active_hints() -> list[str]:
+    """Profile ids the client currently has selected, best-effort."""
+    active = _flclash_active_id()
+    return [active] if active else []
+
+
+def pick_profile(
+    profiles: list[dict[str, Any]], active_hints: list[str] | None = None
+) -> dict[str, Any] | None:
+    """Pick the profile a user means by "the current one".
+
+    Order: the client's selected profile, then a managed profile that already
+    carries AI groups, then the newest non-``config.yaml`` file. Sorting by
+    mtime alone picks whatever subscription the client downloaded last, which is
+    usually *not* the active one, so this must not be the primary key.
+    """
+    if not profiles:
+        return None
+    hints = _active_hints() if active_hints is None else active_hints
+    for hint in hints:
+        for item in profiles:
+            if str(item.get("name")) == hint or Path(str(item.get("path"))).stem == hint:
+                return item
+    managed = [item for item in profiles if item.get("managed")]
+    if managed:
+        return max(managed, key=lambda item: item.get("mtime_ts", 0.0))
+    return profiles[0]
+
+
 def discover_profiles(
     roots: list[str] | None = None, extra: list[str] | None = None
 ) -> dict[str, Any]:
@@ -153,6 +207,9 @@ def discover_profiles(
     profiles.sort(
         key=lambda item: (item["kind"] == "config", -item["mtime_ts"])
     )
+    hints = set(_active_hints())
+    for item in profiles:
+        item["active"] = str(item.get("name")) in hints
     return {"profiles": profiles, "errors": errors}
 
 

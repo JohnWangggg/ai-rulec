@@ -23,6 +23,7 @@ from ai_rulec.profile import (
     repair_provider_cache,
 )
 from ai_rulec.status import profile_status
+from ai_rulec import watch as watch_module
 from ai_rulec.watch import reconcile_once
 
 
@@ -497,6 +498,37 @@ class WatchTests(unittest.TestCase):
                 state_path=str(state),
             )
             self.assertEqual(second["action"], "waiting_for_config", second)
+
+    def test_waiting_for_config_escalates_to_restart(self) -> None:
+        """A client that never reloads config must not leave us waiting forever."""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            meta_dir = make_meta_dir(root)
+            home, profile, rules = make_home(root)
+            write_yaml(home / "config.yaml", {"mixed-port": 7890})
+            state_path = home / "watch.json"
+            kwargs = dict(
+                meta_path=str(meta_dir / "meta.yaml"),
+                rules_dir=str(rules),
+                settle=0,
+                state_path=str(state_path),
+            )
+            first = reconcile_once(str(profile), **kwargs)
+            self.assertEqual(first["action"], "reapplied", first)
+            results = [reconcile_once(str(profile), **kwargs) for _ in range(3)]
+            self.assertEqual(
+                {item["action"] for item in results}, {"waiting_for_config"}
+            )
+            self.assertLess(results[0]["waiting_cycles"], watch_module.WAITING_LIMIT)
+            self.assertNotIn("restart the client", " ".join(results[0]["warnings"]))
+            final = results[-1]
+            self.assertEqual(final["waiting_cycles"], watch_module.WAITING_LIMIT)
+            self.assertTrue(
+                any("restart the client" in warning for warning in final["warnings"]),
+                final,
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(state["waiting_cycles"], watch_module.WAITING_LIMIT)
 
     def test_reconcile_reapplies_after_profile_rewrite(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

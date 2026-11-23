@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 import yaml
 
-from .profile import discover_profiles
+from .profile import discover_profiles, pick_profile
 
 USER_AGENT = "ai-rulec-health/0.1"
 DEFAULT_TIMEOUT = 6.0
@@ -77,7 +77,11 @@ def _config_for(path: Path) -> Path | None:
 
 def resolve_proxy_url(roots: list[str] | None = None) -> str | None:
     discovered = discover_profiles(roots=roots)
-    for profile in discovered.get("profiles", []):
+    picked = pick_profile(discovered.get("profiles") or [])
+    ordered = ([picked] if picked else []) + [
+        item for item in discovered.get("profiles", []) if item is not picked
+    ]
+    for profile in ordered:
         path = Path(profile["path"])
         config_path = _config_for(path)
         if config_path is None:

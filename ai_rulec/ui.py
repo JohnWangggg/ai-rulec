@@ -26,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 
 from . import paths
-from .profile import discover_profiles
+from .profile import discover_profiles, pick_profile
 from .status import profile_status
 
 HEALTH_TTL = 60.0
@@ -55,9 +55,8 @@ _health_cache: dict[str, object] = {"at": 0.0, "data": None}
 
 
 def _latest_profile() -> str | None:
-    discovered = discover_profiles()
-    profiles = discovered.get("profiles") or []
-    return profiles[0]["path"] if profiles else None
+    picked = pick_profile(discover_profiles().get("profiles") or [])
+    return str(picked["path"]) if picked else None
 
 
 def _group_egress(profile_path: str) -> dict[str, list[str]]:

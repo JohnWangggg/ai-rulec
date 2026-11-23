@@ -22,6 +22,7 @@ from .profile import (
     discover_profiles,
     doctor_profile,
     list_backups,
+    pick_profile,
     restore_profile,
 )
 from .sources import load_rules
@@ -43,6 +44,14 @@ def _write_json(path: str, data: Any) -> None:
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2, sort_keys=True)
         fh.write("\n")
+
+
+def _latest_profile(discovered: dict[str, Any], command: str) -> str:
+    """Resolve --latest: the client's selected profile, not the newest file."""
+    picked = pick_profile(discovered["profiles"])
+    if picked is None:
+        raise SystemExit(f"{command}: no profiles discovered")
+    return str(picked["path"])
 
 
 def _probe_proxy(value: str) -> str | None:
@@ -251,11 +260,12 @@ def _discover(args: argparse.Namespace) -> int:
         return 1
     for profile in profiles:
         managed = " managed" if profile["managed"] else ""
-        print(f"{profile['path']}  [{profile['kind']}]")
+        active = " active" if profile.get("active") else ""
+        print(f"{profile['path']}  [{profile['kind']}{active}{managed}]")
         print(
             "  "
             f"proxies={profile['proxies']} groups={profile['proxy_groups']} "
-            f"rules={profile['rules']} target={profile['target_hint']}{managed}"
+            f"rules={profile['rules']} target={profile['target_hint']}"
         )
     if result["errors"]:
         print(f"errors: {len(result['errors'])}")
@@ -265,10 +275,9 @@ def _discover(args: argparse.Namespace) -> int:
 def _apply(args: argparse.Namespace) -> int:
     profile = args.profile
     if args.latest and not profile:
-        discovered = discover_profiles(extra=args.profile_root)
-        if not discovered["profiles"]:
-            raise SystemExit("apply: no profiles discovered")
-        profile = discovered["profiles"][0]["path"]
+        profile = _latest_profile(
+            discover_profiles(extra=args.profile_root), "apply"
+        )
     if not profile:
         raise SystemExit("apply: pass a profile path or --latest")
     meta_path = paths.resolve_meta(args.meta)
@@ -480,10 +489,9 @@ def _singbox_watch(args: argparse.Namespace) -> int:
 def _rollback(args: argparse.Namespace) -> int:
     profile = args.profile
     if args.latest and not profile:
-        discovered = discover_profiles(extra=args.profile_root)
-        if not discovered["profiles"]:
-            raise SystemExit("rollback: no profiles discovered")
-        profile = discovered["profiles"][0]["path"]
+        profile = _latest_profile(
+            discover_profiles(extra=args.profile_root), "rollback"
+        )
     if not profile:
         raise SystemExit("rollback: pass a profile path or --latest")
 
@@ -539,10 +547,9 @@ def _rollback(args: argparse.Namespace) -> int:
 def _doctor(args: argparse.Namespace) -> int:
     profile = args.profile
     if args.latest and not profile:
-        discovered = discover_profiles(extra=args.profile_root)
-        if not discovered["profiles"]:
-            raise SystemExit("doctor: no profiles discovered")
-        profile = discovered["profiles"][0]["path"]
+        profile = _latest_profile(
+            discover_profiles(extra=args.profile_root), "doctor"
+        )
     if not profile:
         raise SystemExit("doctor: pass a profile path or --latest")
 
@@ -585,17 +592,21 @@ def _doctor(args: argparse.Namespace) -> int:
 
 def _watch(args: argparse.Namespace) -> int:
     profile = args.profile
-    if args.latest and not profile:
-        discovered = discover_profiles(extra=args.profile_root)
-        if not discovered["profiles"]:
-            raise SystemExit("watch: no profiles discovered")
-        profile = discovered["profiles"][0]["path"]
+    # --latest means "whichever profile the client has selected now".  The
+    # watcher resolves that every cycle, so switching profiles in the client
+    # does not leave it pinned to a stale subscription.
+    follow_active = bool(args.latest and not profile)
+    if follow_active:
+        profile = _latest_profile(
+            discover_profiles(extra=args.profile_root), "watch"
+        )
     if not profile:
         raise SystemExit("watch: pass a profile path or --latest")
 
     try:
         result = watch_config(
             profile,
+            follow_active=follow_active,
             meta_path=str(paths.resolve_meta(args.meta)) if args.reapply else None,
             target=args.target,
             mapping=parse_target_map(args.map),
@@ -665,10 +676,9 @@ def _watch(args: argparse.Namespace) -> int:
 def _status(args: argparse.Namespace) -> int:
     profile = args.profile
     if args.latest and not profile:
-        discovered = discover_profiles(extra=args.profile_root)
-        if not discovered["profiles"]:
-            raise SystemExit("status: no profiles discovered")
-        profile = discovered["profiles"][0]["path"]
+        profile = _latest_profile(
+            discover_profiles(extra=args.profile_root), "status"
+        )
     if not profile:
         raise SystemExit("status: pass a profile path or --latest")
 

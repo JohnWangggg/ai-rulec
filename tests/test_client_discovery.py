@@ -115,3 +115,36 @@ class ClientDiscoveryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PickProfileTest(unittest.TestCase):
+    def item(self, name: str, mtime: float, managed: bool = False) -> dict:
+        return {"name": name, "path": f"/tmp/profiles/{name}.yaml",
+                "mtime_ts": mtime, "managed": managed}
+
+    def test_active_profile_wins_over_newer_download(self) -> None:
+        from ai_rulec.profile import pick_profile
+
+        active = self.item("382", mtime=100.0, managed=True)
+        newer = self.item("383", mtime=200.0)
+        picked = pick_profile([newer, active], active_hints=["382"])
+        self.assertIs(picked, active)
+
+    def test_managed_profile_beats_newest_unmanaged(self) -> None:
+        from ai_rulec.profile import pick_profile
+
+        managed = self.item("382", mtime=100.0, managed=True)
+        newer = self.item("383", mtime=200.0)
+        self.assertIs(pick_profile([newer, managed], active_hints=[]), managed)
+
+    def test_falls_back_to_newest_without_hints_or_managed(self) -> None:
+        from ai_rulec.profile import pick_profile
+
+        older = self.item("a", mtime=100.0)
+        newer = self.item("b", mtime=200.0)
+        self.assertIs(pick_profile([newer, older], active_hints=[]), newer)
+
+    def test_empty_profiles(self) -> None:
+        from ai_rulec.profile import pick_profile
+
+        self.assertIsNone(pick_profile([], active_hints=["382"]))

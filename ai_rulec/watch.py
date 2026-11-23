@@ -33,8 +33,10 @@ from .profile import (
     _runtime_config,
     _sha256,
     apply_profile,
+    discover_profiles,
     doctor_profile,
     inspect_profile,
+    pick_profile,
     repair_provider_cache,
 )
 
@@ -42,6 +44,9 @@ DEFAULT_INTERVAL = 2.0
 DEFAULT_STATE = ".ai-rulec-watch.json"
 SKIPPED_ACTIONS = {"skipped", "cache_ok", "waiting_for_config"}
 STALE_FLOOR = 30.0
+# After this many waiting cycles the client clearly never reloaded config.yaml,
+# so escalate from "waiting" to "restart the client".
+WAITING_LIMIT = 3
 
 
 def _now() -> str:
@@ -447,10 +452,20 @@ def _reconcile_once(
             result["errors"].append("config has no AI providers and --meta is missing")
         elif state.get("applied_profile_hash") == profile_hash:
             result["action"] = "waiting_for_config"
-            result["warnings"].append(
-                "config has no AI providers; profile was already reapplied, "
-                "waiting for FlClash to regenerate config.yaml"
-            )
+            cycles = int(state.get("waiting_cycles") or 0) + 1
+            state["waiting_cycles"] = cycles
+            result["waiting_cycles"] = cycles
+            if cycles >= WAITING_LIMIT:
+                result["warnings"].append(
+                    f"config has no AI providers after {cycles} cycles: the client "
+                    "applied profile on disk but never reloaded it; restart the "
+                    "client (FlClash) to activate the AI rules"
+                )
+            else:
+                result["warnings"].append(
+                    "config has no AI providers; profile was already reapplied, "
+                    "waiting for the client to regenerate config.yaml"
+                )
         elif dry_run:
             result["action"] = "would_reapply"
         else:
@@ -516,6 +531,8 @@ def _reconcile_once(
         )
         if result["action"] == "reapplied":
             state["applied_profile_hash"] = new_profile_hash
+        if result["action"] != "waiting_for_config":
+            state.pop("waiting_cycles", None)
         try:
             _save_state(state_file, state)
         except OSError as exc:
@@ -523,9 +540,16 @@ def _reconcile_once(
     return result
 
 
+def _active_profile() -> Path | None:
+    """Resolve the client's selected profile the same way ``--latest`` does."""
+    picked = pick_profile(discover_profiles().get("profiles") or [])
+    return Path(str(picked["path"])).resolve() if picked else None
+
+
 def watch(
-    profile_path: str,
+    profile_path: str | None,
     *,
+    follow_active: bool = False,
     meta_path: str | None = None,
     target: str | None = None,
     mapping: dict[str, str] | None = None,
@@ -545,12 +569,30 @@ def watch(
     agents_interval: float = 300.0,
     agents_timeout: float = 6.0,
 ) -> dict[str, Any] | None:
-    """Reconcile once, or poll forever.  Returns the first result when once."""
-    profile_file = Path(profile_path).expanduser().resolve()
+    """Reconcile once, or poll forever.  Returns the first result when once.
+
+    ``follow_active`` re-resolves the client's selected profile every cycle, so
+    a profile switch in FlClash moves the watcher instead of leaving it pinned
+    to the subscription that happened to be active at launch.
+    """
+    profile_file = (
+        Path(profile_path).expanduser().resolve() if profile_path else None
+    )
+    if profile_file is None:
+        if not follow_active:
+            raise ValueError("watch: pass a profile path or --latest")
+        profile_file = _active_profile()
+    if profile_file is None:
+        raise ValueError("watch: no profiles discovered")
     home = _state_file(profile_file, state_path).parent
-    last_printed: tuple[str, bool] | None = None
+    last_printed: tuple[str, bool, bool] | None = None
 
     while True:
+        if follow_active:
+            current = _active_profile()
+            if current is not None and current != profile_file:
+                profile_file = current
+                home = _state_file(profile_file, state_path).parent
         with _lock(home) as acquired:
             if not acquired:
                 result: dict[str, Any] = {
@@ -592,7 +634,11 @@ def watch(
                     _record_seen(result, interval)
         if once:
             return result
-        marker = (result.get("action", "error"), bool(result.get("ok")))
+        marker = (
+            result.get("action", "error"),
+            bool(result.get("ok")),
+            int(result.get("waiting_cycles") or 0) >= WAITING_LIMIT,
+        )
         if marker != last_printed:
             if json_output:
                 print(json.dumps(result, ensure_ascii=False))

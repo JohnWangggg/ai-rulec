@@ -83,11 +83,18 @@ def profile_status(
         warnings.append("profile has no AI-* proxy groups")
     if not cache.get("ok"):
         summary = cache.get("summary") or {}
-        warnings.append(
-            "provider cache incomplete: "
-            f"{summary.get('missing', 0)} missing, "
-            f"{summary.get('mismatch', 0)} mismatch"
-        )
+        if info.get("managed") and not summary.get("managed"):
+            warnings.append(
+                "runtime config has no AI providers; "
+                "the client has not reloaded the profile yet"
+            )
+        else:
+            warnings.append(
+                "provider cache incomplete: "
+                f"{summary.get('missing', 0)} missing, "
+                f"{summary.get('mismatch', 0)} mismatch, "
+                f"{summary.get('other', 0)} other"
+            )
     if port_open is False:
         warnings.append(f"proxy port {port} is not listening")
     if not state:

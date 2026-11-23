@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.16.0] - 2026-11-23
+
+`--latest` 现在指「客户端正在用的那份」，不再是「磁盘上最新落盘的那份」。
+
+### Fixed
+
+- `--latest`（`status` / `apply` / `rollback` / `doctor` / `watch` / `ui` / health 的代理推断）改为读取 FlClash 的 `currentProfileId`：新增 `profile.pick_profile()`，按「激活中 → 已纳管且带 AI 组 → 最新 mtime」三级回退。此前 FlClash 每次拉取订阅都会落盘新 profile，`--latest` 会静默指向一个未纳管的订阅（实测 `status --latest` 报 `ok False`、`groups 3`）。
+- `watch --latest` 新增 `follow_active`：每轮重解析客户端当前 profile，用户在 FlClash 里换订阅后 watcher 跟着走，不再被启动时的路径钉死。
+- `waiting_for_config` 不再无限等待：连续 `WAITING_LIMIT`(3) 轮看到「profile 已重放、config 仍无 AI provider」后升级为明确提示「重启客户端以加载 AI 规则」，并在 state 里记录 `waiting_cycles`；配置一旦被重载即清零。
+- `status` 在 config 尚无 AI provider 条目时，不再误报 `provider cache incomplete: 0 missing, 0 mismatch`，改为 `runtime config has no AI providers; the client has not reloaded the profile yet`，并补上 `other` 计数。
+
+### Changed
+
+- `status` / `doctor` / `apply` / `rollback` / `watch` 统一走 `cli._latest_profile()`，没有可用 profile 时报 `<command>: no profiles discovered`，而不是抛 `IndexError`。
+- `discover` 输出用 `[profile active managed]` 标注选中项，避免再靠 mtime 猜测。
+
 ## [0.15.0] - 2026-11-23
 
 跨平台：同一份代码在 macOS、Linux、Windows 上走同一套路径与生命周期。

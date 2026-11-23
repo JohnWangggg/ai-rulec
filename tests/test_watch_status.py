@@ -9,7 +9,8 @@ from pathlib import Path
 import yaml
 
 from ai_rulec.status import profile_status
-from ai_rulec.watch import reconcile_once
+from ai_rulec import watch as watch_module
+from ai_rulec.watch import reconcile_once, watch
 
 NOW_FMT = "%Y-%m-%dT%H:%M:%S%z"
 
@@ -115,6 +116,32 @@ class WatchLivenessTests(unittest.TestCase):
             report = profile_status(str(profile), state_path=str(state_file))
             self.assertFalse(report["watch"]["stale"])
             self.assertEqual(report["watch"]["interval"], 600.0)
+
+
+class FollowActiveTest(unittest.TestCase):
+    def test_watch_requires_profile_without_follow_active(self) -> None:
+        with self.assertRaises(ValueError):
+            watch(None, follow_active=False, once=True)
+
+    def test_watch_resolves_active_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            _root, profile = make_home(Path(tmp))
+            original = watch_module._active_profile
+            watch_module._active_profile = lambda: profile
+            try:
+                result = watch(
+                    None,
+                    follow_active=True,
+                    once=True,
+                    dry_run=True,
+                    reapply=False,
+                    fix_cache=False,
+                    json_output=False,
+                )
+            finally:
+                watch_module._active_profile = original
+        self.assertIsNotNone(result)
+        self.assertEqual(result["profile"], str(profile.resolve()))
 
 
 if __name__ == "__main__":
