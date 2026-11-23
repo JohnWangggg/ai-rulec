@@ -56,13 +56,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 -DryRu
 ai-rulec service install --meta out\mihomo-meta.yaml --python .venv\Scripts\python.exe --interval 5 --agents-interval 300
 ```
 
-任务名、触发方式、命令行都由这个子命令负责；`ai-rulec service describe` 会打印它准备执行的确切 `schtasks` 参数而不写任何东西。
+任务名、触发方式、命令行都由这个子命令负责；`ai-rulec service describe --json` 会打印它准备执行的确切 `schtasks` 参数而不写任何东西（不带 `--json` 时只打印任务名、后端和命令行）。
 
-`-NoMihomo` 只跳过「PATH 里有没有 `mihomo.exe`」这项检查；没有 mihomo 时 `build` 会跳过 `mihomo -t` 校验，产物仍会生成。事后想补校验：装上 mihomo 再跑 `ai-rulec verify`。
+`-NoMihomo` 只跳过「PATH 里有没有 `mihomo.exe`」这项检查；没有 mihomo 时 `build` 的校验会把 `mihomo` 记为 `skipped` 并给一条 warning，产物照常生成。事后想补校验：装上 mihomo 再跑 `ai-rulec verify`。
 
 ## mihomo 校验器
 
-`apply` / `doctor` / `watch` 用 `mihomo -t` 验证配置能否加载。没有它时校验会被跳过，看起来像校验通过，所以安装器默认检查 PATH 里有没有 `mihomo.exe`：
+`build` / `apply` / `verify` / `watch` 在找到 mihomo 时用 `mihomo -t` 验证配置能否加载（`build` 若带 `--skip-verify` 则例外）。没有它时校验被跳过，只在输出里留一条 warning，看起来像通过，所以安装器默认检查 PATH 里有没有 `mihomo.exe`：
 
 1. 打开 <https://github.com/MetaCubeX/mihomo/releases>，下载 `mihomo-windows-amd64-*.zip`（ARM64 机器选 `arm64`）；
 2. 解压出 `mihomo.exe`，例如放进 `%LOCALAPPDATA%\mihomo`（路径自己定，别放需要管理员权限的目录）；

@@ -280,8 +280,9 @@ try {
         param([string[]]$Arguments, [string]$What)
         & $VenvPy -m pip install @Arguments
         if ($LASTEXITCODE -eq 0) { return }
-        Write-Warn "pip failed with the default index; retrying with https://pypi.org/simple"
-        & $VenvPy -m pip install @Arguments -i https://pypi.org/simple
+        Write-Warn 'pip failed with the default index; retrying with https://pypi.org/simple'
+        $fallback = @($Arguments) + @('-i', 'https://pypi.org/simple')
+        & $VenvPy -m pip install @fallback
         if ($LASTEXITCODE -ne 0) {
             Fail "pip install failed: $What" @(
                 'check network/proxy settings (HTTPS_PROXY), then re-run this script',
