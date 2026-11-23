@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any
 
 import yaml
@@ -77,7 +78,9 @@ def _build(args: argparse.Namespace) -> int:
     formats = tuple(
         ("mihomo", "sing-box", "surge") if "all" in args.formats else args.formats
     )
-    out_dir = paths.resolve_out(args.out if args.out != "out" else None)
+    # build always means "write here, now": only an explicit --out moves it.
+    # Reading commands use paths.resolve_out(), which also knows the last build.
+    out_dir = Path(args.out).expanduser() if args.out else Path.cwd() / "out"
     args.out = str(out_dir)
     os.makedirs(args.out, exist_ok=True)
     try:
@@ -159,6 +162,7 @@ def _build(args: argparse.Namespace) -> int:
 
 
 def _probe(args: argparse.Namespace) -> int:
+    args.out = str(paths.resolve_out(args.out))
     catalog_path = os.path.join(args.out, "catalog.json")
     if not os.path.exists(catalog_path):
         raise SystemExit(f"{catalog_path}: not found; run build first")
@@ -334,6 +338,7 @@ def _apply(args: argparse.Namespace) -> int:
 def _surge(args: argparse.Namespace) -> int:
     from .surge import apply_surge
 
+    args.out = str(paths.resolve_out(args.out))
     services = list(
         _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
     )
@@ -393,6 +398,7 @@ def _surge(args: argparse.Namespace) -> int:
 def _singbox(args: argparse.Namespace) -> int:
     from .singbox import apply_singbox, discover_configs
 
+    args.out = str(paths.resolve_out(args.out))
     services = list(
         _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
     )
@@ -454,6 +460,7 @@ def _singbox(args: argparse.Namespace) -> int:
 def _singbox_watch(args: argparse.Namespace) -> int:
     from .singbox_watch import watch as watch_singbox
 
+    args.out = str(paths.resolve_out(args.out))
     services = list(
         _load_yaml(defaults.resolve("services", args.services_file)).get("services", {})
     )
@@ -793,6 +800,15 @@ def _health(args: argparse.Namespace) -> int:
     else:
         proxy_url = args.proxy
 
+    if proxy_url and not port_open(proxy_url):
+        # Same policy as the watcher: a configured-but-dead proxy is worse than
+        # no proxy, because every check burns its timeout twice.
+        print(
+            f"health: {proxy_url} is not listening; checking directly",
+            file=sys.stderr,
+        )
+        proxy_url = None
+
     proxy_state = port_open(proxy_url) if proxy_url else None
     try:
         report = check_agents(
@@ -863,6 +879,7 @@ def _health(args: argparse.Namespace) -> int:
 
 
 def _verify(args: argparse.Namespace) -> int:
+    args.out = str(paths.resolve_out(args.out))
     coverage_path = os.path.join(args.out, "coverage.json")
     if not os.path.exists(coverage_path):
         raise SystemExit(f"{coverage_path}: not found; run build first")
@@ -896,7 +913,12 @@ def _service(args: argparse.Namespace) -> int:
     elif action == "status":
         report = service_backend.status()
     else:
-        report = service_backend.describe()
+        report = service_backend.describe(
+            meta=args.meta,
+            interval=args.interval,
+            agents_interval=args.agents_interval,
+            python=args.python,
+        )
 
     if args.json:
         print(json.dumps(report, ensure_ascii=False, indent=2))
@@ -930,7 +952,10 @@ def _service(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="ai-rulec",
-        description="Compile AI-service rule catalogs into mihomo rule-providers.",
+        description=(
+            "Compile AI-service rule catalogs into mihomo, sing-box and Surge "
+            "rules, then apply them to the running client and keep them there."
+        ),
     )
     parser.add_argument("--version", action="version", version=f"ai-rulec {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -938,7 +963,7 @@ def main(argv: list[str] | None = None) -> int:
     build = sub.add_parser("build", help="parse sources, build catalog, emit configs")
     build.add_argument("--services", default=None, help="services catalog (default: bundled)")
     build.add_argument("--sources", default=None, help="source list (default: bundled)")
-    build.add_argument("--out", default="out")
+    build.add_argument("--out", default=None, help="build directory (default: ./out)")
     build.add_argument("--max-age-days", type=int, default=90)
     build.add_argument("--skip-verify", action="store_true")
     build.add_argument(
@@ -985,7 +1010,7 @@ def main(argv: list[str] | None = None) -> int:
     build.set_defaults(func=_build)
 
     probe = sub.add_parser("probe", help="probe catalog domains over DNS/TLS/HTTP")
-    probe.add_argument("--out", default="out")
+    probe.add_argument("--out", default=None, help="build directory (default: ./out or the last build)")
     probe.add_argument("--timeout", type=float, default=4.0)
     probe.add_argument("--workers", type=int, default=24)
     probe.add_argument("--limit", type=int, default=0)
@@ -1044,7 +1069,10 @@ def main(argv: list[str] | None = None) -> int:
     apply.add_argument(
         "--latest",
         action="store_true",
-        help="use the most recently modified discovered profile",
+        help=(
+            "use the client's selected profile; if unknown, a managed profile, "
+            "then the newest file"
+        ),
     )
     apply.add_argument(
         "--profile-root",
@@ -1096,7 +1124,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="service=target override; repeat or comma-separate",
     )
-    surge.add_argument("--out", default="out", help="build dir holding surge/AI-Rules")
+    surge.add_argument("--out", default=None, help="build dir holding surge/AI-Rules (default: ./out or the last build)")
     surge.add_argument("--lists-dir", default=None, help="override AI-Rules list source")
     surge.add_argument("--services-file", default=None)
     surge.add_argument("--no-backup", action="store_true")
@@ -1121,7 +1149,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="service=outbound override; repeat or comma-separate",
     )
-    singbox.add_argument("--out", default="out", help="build dir holding singbox/AI-Rules")
+    singbox.add_argument("--out", default=None, help="build dir holding singbox/AI-Rules (default: ./out or the last build)")
     singbox.add_argument("--lists-dir", default=None, help="override rule-set source")
     singbox.add_argument("--rules-dir", default="AI-Rules", help="rule-set dir relative to config")
     singbox.add_argument("--services-file", default=None)
@@ -1143,7 +1171,7 @@ def main(argv: list[str] | None = None) -> int:
         default=[],
         help="service=outbound override; repeat or comma-separate",
     )
-    singbox_watch.add_argument("--out", default="out", help="build dir holding singbox/AI-Rules")
+    singbox_watch.add_argument("--out", default=None, help="build dir holding singbox/AI-Rules (default: ./out or the last build)")
     singbox_watch.add_argument("--lists-dir", default=None)
     singbox_watch.add_argument("--rules-dir", default="AI-Rules")
     singbox_watch.add_argument("--services-file", default=None)
@@ -1288,7 +1316,7 @@ def main(argv: list[str] | None = None) -> int:
     health.set_defaults(func=_health)
 
     verify = sub.add_parser("verify", help="validate emitted configs and providers")
-    verify.add_argument("--out", default="out")
+    verify.add_argument("--out", default=None, help="build directory (default: ./out or the last build)")
     verify.set_defaults(func=_verify)
 
     ui = sub.add_parser(

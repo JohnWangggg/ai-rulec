@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 from pathlib import Path
 
 from . import platforms
@@ -85,7 +84,7 @@ def mihomo_binary(explicit: str | Path | None = None) -> tuple[str | None, str |
         if candidate.is_file() and os.access(candidate, os.X_OK):
             return str(candidate), None
         return None, f"{candidate} is not an executable file; {MIHOMO_HINT}"
-    found = shutil.which("mihomo")
+    found = platforms.which_exe("mihomo")
     if found:
         return found, None
     return None, f"mihomo not found; {MIHOMO_HINT}"

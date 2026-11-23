@@ -692,6 +692,15 @@ def apply_profile(
         report["ok"] = True
         return report
 
+    mihomo, mihomo_hint = _mihomo_binary(verify_mihomo)
+    # Validate before touching the client: a rejected merge must leave the
+    # profile, the provider files and the cache exactly as they were.
+    report["mihomo"] = _validate_merged(
+        merged, home_dir=home_dir, mihomo=mihomo, hint=mihomo_hint
+    )
+    if report["mihomo"].get("warning"):
+        report["warnings"] = [*(report.get("warnings") or []), report["mihomo"]["warning"]]
+
     out_dir.mkdir(parents=True, exist_ok=True)
     backups: dict[str, str] = {}
     if backup and destination.exists():
@@ -716,22 +725,23 @@ def apply_profile(
         report["rules_copied"] = copied
     report["backup"] = backups
 
-    if repair_cache:
-        if out_path:
-            report["cache"] = {
-                "ok": None,
-                "skipped": "out_path set; cache repair only runs for in-place apply",
-            }
-        else:
-            try:
-                report["cache"] = repair_provider_cache(
-                    profile_file, rules_dir=target_rules, backup=True
-                )
-            except (OSError, ValueError, yaml.YAMLError) as exc:
-                report["cache"] = {
-                    "ok": None,
-                    "error": f"{type(exc).__name__}: {exc}",
-                }
+    if repair_cache and not out_path:
+        # Repair before the swap, never after: the runtime config still names
+        # the old hashed paths, and a cache we cannot write must abort the
+        # apply instead of leaving a profile whose providers fail to load.
+        report["cache"] = repair_provider_cache(
+            profile_file, rules_dir=target_rules, backup=True
+        )
+        if report["cache"].get("ok") is False and report["cache"].get("errors"):
+            raise ValueError(
+                "provider cache repair failed: "
+                + "; ".join(str(item) for item in report["cache"]["errors"])
+            )
+    elif out_path:
+        report["cache"] = {
+            "ok": None,
+            "skipped": "out_path set; cache repair only runs for in-place apply",
+        }
 
     fd, temp_name = tempfile.mkstemp(
         prefix=destination.stem + ".", suffix=".tmp.yaml", dir=str(out_dir)
@@ -747,49 +757,6 @@ def apply_profile(
                 sort_keys=False,
                 default_flow_style=False,
             )
-
-        mihomo, mihomo_hint = _mihomo_binary(verify_mihomo)
-        if mihomo:
-            mihomo_home = home_dir
-            has_dat = (mihomo_home / "GEOIP.dat").is_file()
-            validation = dict(merged)
-            if has_dat:
-                validation["geodata-mode"] = True
-            with open(temp_path, "w", encoding="utf-8") as fh:
-                fh.write("# merged by ai-rulec (validation copy)\n")
-                yaml.safe_dump(
-                    validation,
-                    fh,
-                    allow_unicode=True,
-                    sort_keys=False,
-                    default_flow_style=False,
-                )
-            with tempfile.TemporaryDirectory(prefix="ai-rulec-mihomo-") as work:
-                data_dir = Path(work)
-                linked = _link_geo_assets(mihomo_home, data_dir)
-                proc = subprocess.run(
-                    [mihomo, "-t", "-d", str(data_dir), "-f", str(temp_path)],
-                    capture_output=True,
-                    text=True,
-                    timeout=45,
-                )
-            output = (proc.stdout + proc.stderr).strip()
-            report["mihomo"] = {
-                "ok": proc.returncode == 0,
-                "returncode": proc.returncode,
-                "geodata_mode": "dat" if has_dat else "config",
-                "geo_assets": linked,
-                "output": output[-2000:],
-            }
-            if proc.returncode != 0:
-                raise ValueError(f"mihomo validation failed: {output[-1000:]}")
-        else:
-            report["mihomo"] = {
-                "ok": None,
-                "warning": f"runtime validation skipped: {mihomo_hint}",
-            }
-            report["warnings"] = [*(report.get("warnings") or []), mihomo_hint]
-
         platforms.atomic_replace(temp_path, destination)
     finally:
         if temp_path.exists():
@@ -822,6 +789,57 @@ def list_backups(profile_path: str | Path) -> dict[str, list[str]]:
         "profile": [str(path) for path in _backup_files(profile_file)],
         "rules": [str(path) for path in _backup_dirs(home_dir / "AI-Rules")],
     }
+
+
+def _validate_merged(
+    merged: dict[str, Any],
+    *,
+    home_dir: Path,
+    mihomo: str | None,
+    hint: str | None,
+) -> dict[str, Any]:
+    """Validate a merged config in a throwaway data directory.
+
+    The real profile is never written first: a rejected merge leaves the
+    client's files untouched. ``merged`` is only rendered to disk inside the
+    temporary directory, so validation-only keys (``geodata-mode``) can never
+    leak into what the client loads.
+    """
+    if not mihomo:
+        return {"ok": None, "warning": f"runtime validation skipped: {hint}"}
+    has_dat = (home_dir / "GEOIP.dat").is_file()
+    validation = dict(merged)
+    if has_dat:
+        validation["geodata-mode"] = True
+    with tempfile.TemporaryDirectory(prefix="ai-rulec-mihomo-") as work:
+        data_dir = Path(work)
+        config_path = data_dir / "config.yaml"
+        with open(config_path, "w", encoding="utf-8") as fh:
+            yaml.safe_dump(
+                validation,
+                fh,
+                allow_unicode=True,
+                sort_keys=False,
+                default_flow_style=False,
+            )
+        linked = _link_geo_assets(home_dir, data_dir)
+        proc = subprocess.run(
+            [mihomo, "-t", "-d", str(data_dir), "-f", str(config_path)],
+            capture_output=True,
+            text=True,
+            timeout=45,
+        )
+    output = (proc.stdout + proc.stderr).strip()
+    report = {
+        "ok": proc.returncode == 0,
+        "returncode": proc.returncode,
+        "geodata_mode": "dat" if has_dat else "config",
+        "geo_assets": linked,
+        "output": output[-2000:],
+    }
+    if proc.returncode != 0:
+        raise ValueError(f"mihomo validation failed: {output[-1000:]}")
+    return report
 
 
 def _validate_config_file(source: Path, home_dir: Path, mihomo: str) -> dict[str, Any]:

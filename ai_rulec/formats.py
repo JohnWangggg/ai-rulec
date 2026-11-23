@@ -128,7 +128,7 @@ def surge_fragment(
     """Return the [Proxy Group] + [Rule] lines a Surge profile needs.
 
     Surge modules cannot define policies, so these lines must be pasted into
-    the profile itself (or applied by `ai-rulec apply --client surge`).
+    the profile itself (or applied by the `ai-rulec surge` subcommand).
     """
     mapping = mapping or {}
     groups = [

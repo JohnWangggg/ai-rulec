@@ -2,14 +2,15 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 from typing import Any
 
 import yaml
 
+from . import platforms
 from .formats import SURGE_PREFIXES
 from .paths import mihomo_binary
+from .surge import find_surge_cli
 
 ALLOWED_PREFIXES = (
     "DOMAIN,",
@@ -75,7 +76,7 @@ def _verify_singbox(outdir: str, errors: list[str], checks: dict[str, Any]) -> N
     if not os.path.exists(config_path):
         errors.append("missing singbox/config.json")
         return
-    binary = shutil.which("sing-box")
+    binary = platforms.which_exe("sing-box")
     if not binary:
         checks["singbox"] = {"status": "skipped", "reason": "sing-box not found"}
         return
@@ -131,11 +132,7 @@ def _verify_surge(outdir: str, errors: list[str], checks: dict[str, Any]) -> Non
     if not os.path.exists(profile_path):
         errors.append("missing surge/profile.conf")
         return
-    binary = shutil.which("surge-cli") or (
-        "/Applications/Surge.app/Contents/Applications/surge-cli"
-        if os.path.exists("/Applications/Surge.app/Contents/Applications/surge-cli")
-        else None
-    )
+    binary = find_surge_cli()
     if not binary:
         checks["surge"] = {"status": "skipped", "reason": "surge-cli not found"}
         return

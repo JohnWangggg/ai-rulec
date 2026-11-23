@@ -361,6 +361,50 @@ class WindowsInstallTests(PlatformHarness):
         self.assertEqual(self.calls[0][:2], ["schtasks", "/Query"])
         self.assertIn("/FO", self.calls[0])
 
+    def test_status_survives_a_localised_schtasks(self) -> None:
+        """A Chinese Windows prints 状态 instead of Status; the state enum does not."""
+
+        def run(argv, *, timeout=120.0, cwd=None):
+            self.calls.append(list(argv))
+            if argv[:2] == ["schtasks", "/Query"]:
+                return completed(
+                    list(argv),
+                    0,
+                    out="\r\nTaskName:      \\ai-rulec-watch\r\nStatus:        Running\r\n",
+                )
+            if argv[0].endswith("powershell.exe"):
+                return completed(list(argv), 0, out="4\r\n")
+            return completed(list(argv))
+
+        with mock.patch.object(
+            platforms, "which_exe", lambda name: "C:/Windows/System32/" + name + ".exe"
+        ):
+            with mock.patch.object(service, "_run", run):
+                report = service.status()
+        self.assertTrue(report["running"], report)
+        self.assertEqual(report["state"], 4)
+
+    def test_status_falls_back_to_localised_labels(self) -> None:
+        def run(argv, *, timeout=120.0, cwd=None):
+            self.calls.append(list(argv))
+            if argv[:2] == ["schtasks", "/Query"]:
+                return completed(
+                    list(argv), 0, out="任务名:        \\ai-rulec-watch\n状态:          正在运行\n"
+                )
+            # No PowerShell: the text is all we have.
+            return completed(list(argv), 1, out="")
+
+        def which(name):
+            if name in ("powershell", "pwsh"):
+                return None
+            return "C:/Windows/System32/" + name + ".exe"
+
+        with mock.patch.object(platforms, "which_exe", which):
+            with mock.patch.object(service, "_run", run):
+                report = service.status()
+        self.assertTrue(report["running"], report)
+        self.assertNotIn("state", report)
+
 
 class UnsupportedTests(PlatformHarness):
     family = "freebsd14"

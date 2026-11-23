@@ -441,6 +441,135 @@ class ApplyTests(unittest.TestCase):
             )
 
 
+class ApplyValidationTests(unittest.TestCase):
+    """A rejected merge must not touch the client's files."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self.meta_dir = make_meta_dir(self.root)
+        self.home, self.profile, self.rules = make_home(self.root)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def write_runtime_config(self) -> None:
+        write_yaml(
+            self.home / "config.yaml",
+            {
+                "mixed-port": 7890,
+                "rule-providers": {
+                    "openai": {
+                        "type": "file",
+                        "behavior": "classical",
+                        "path": "./cache/openai.yaml",
+                    }
+                },
+            },
+        )
+
+    def test_failed_validation_leaves_profile_and_rules_untouched(self) -> None:
+        from unittest import mock
+
+        from ai_rulec import profile as profile_module
+
+        before_profile = self.profile.read_bytes()
+        before_rules = (self.rules / "openai.yaml").read_bytes()
+        with mock.patch.object(
+            profile_module,
+            "_validate_merged",
+            side_effect=ValueError("mihomo validation failed: bad config"),
+        ):
+            with self.assertRaises(ValueError):
+                apply_profile(
+                    str(self.profile),
+                    str(self.meta_dir / "meta.yaml"),
+                    target="PROXY",
+                    backup=False,
+                    verify_mihomo=None,
+                )
+        self.assertEqual(self.profile.read_bytes(), before_profile)
+        self.assertEqual((self.rules / "openai.yaml").read_bytes(), before_rules)
+        self.assertFalse(list(self.root.rglob("*.tmp.yaml")))
+
+    def test_validation_only_keys_never_reach_the_profile(self) -> None:
+        from unittest import mock
+
+        from ai_rulec import profile as profile_module
+
+        self.write_runtime_config()
+        def fake_validate(merged, **kwargs):
+            self.assertIn("proxy-groups", merged)
+            return {"ok": True, "returncode": 0}
+
+        with mock.patch.object(profile_module, "_validate_merged", side_effect=fake_validate):
+            report = apply_profile(
+                str(self.profile),
+                str(self.meta_dir / "meta.yaml"),
+                target="PROXY",
+                backup=False,
+                verify_mihomo=None,
+            )
+        self.assertTrue(report["ok"], report)
+        data = yaml.safe_load(self.profile.read_text(encoding="utf-8"))
+        self.assertNotIn("geodata-mode", data)
+        self.assertEqual(data["rules"][0], "RULE-SET,openai,AI-openai")
+        self.assertTrue(report["cache"]["ok"], report["cache"])
+
+    def test_cache_repair_runs_before_the_profile_is_replaced(self) -> None:
+        from unittest import mock
+
+        from ai_rulec import profile as profile_module
+
+        self.write_runtime_config()
+        seen: dict[str, bool] = {}
+
+        def fake_repair(profile_path, **kwargs):
+            # Only apply_profile writes this header, so it marks the swap.
+            seen["profile_written"] = Path(profile_path).read_text(
+                encoding="utf-8"
+            ).startswith("# merged by ai-rulec")
+            return {"ok": True, "managed": 1, "ok_count": 1}
+
+        with mock.patch.object(
+            profile_module, "_validate_merged", return_value={"ok": True}
+        ), mock.patch.object(
+            profile_module, "repair_provider_cache", side_effect=fake_repair
+        ):
+            apply_profile(
+                str(self.profile),
+                str(self.meta_dir / "meta.yaml"),
+                target="PROXY",
+                backup=False,
+                verify_mihomo=None,
+            )
+        self.assertFalse(seen.get("profile_written"), seen)
+
+    def test_failed_cache_repair_leaves_the_profile_untouched(self) -> None:
+        from unittest import mock
+
+        from ai_rulec import profile as profile_module
+
+        self.write_runtime_config()
+        before = self.profile.read_bytes()
+        with mock.patch.object(
+            profile_module, "_validate_merged", return_value={"ok": True}
+        ), mock.patch.object(
+            profile_module,
+            "repair_provider_cache",
+            return_value={"ok": False, "errors": ["permission denied"]},
+        ):
+            with self.assertRaises(ValueError):
+                apply_profile(
+                    str(self.profile),
+                    str(self.meta_dir / "meta.yaml"),
+                    target="PROXY",
+                    backup=False,
+                    verify_mihomo=None,
+                )
+        self.assertEqual(self.profile.read_bytes(), before)
+
+
 class WatchTests(unittest.TestCase):
     def test_reconcile_repairs_cache_once(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -90,7 +90,9 @@ agents:
       - id: web
         type: http
         url: https://chatgpt.com/
-        expect: [200]
+        # Cloudflare answers 403 to non-browser clients; that still proves the
+        # route works, which is what this check is for.
+        expect: [200, 403]
         required: false
       - id: cli
         type: binary

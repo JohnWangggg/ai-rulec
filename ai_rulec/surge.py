@@ -89,7 +89,7 @@ def find_surge_cli() -> str | None:
             if os.path.exists(candidate):
                 return candidate
         else:
-            found = shutil.which(candidate)
+            found = platforms.which_exe(candidate)
             if found:
                 return found
     return None

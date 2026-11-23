@@ -1,4 +1,4 @@
-# Local P0 sources. Override with the SOURCE_ROOT env var.
+# Local rule sources. Override with the SOURCE_ROOT env var.
 default_root: .sources
 
 sources:

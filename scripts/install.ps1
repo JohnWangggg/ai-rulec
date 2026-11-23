@@ -102,7 +102,7 @@ function Write-Troubleshooting {
     Write-Host '      (or File > Properties > Unblock on the .zip, then extract again)'
     Write-Host '  * apply failed with PermissionError: quit FlClash completely'
     Write-Host '      (tray icon > Quit, then wait until FlClash.exe is gone) and re-run.'
-    Write-Host '  * long or CJK paths: move the repo to a short ASCII path, e.g. C:\src\ai_proxy'
+    Write-Host '  * long or CJK paths: move the repo to a short ASCII path, e.g. C:\src\ai-rulec'
     Write-Host '      (Windows MAX_PATH applies to some clients even with long-path support on).'
 }
 
@@ -225,6 +225,12 @@ try {
         Write-Host "  run    `"$VenvPy`" -m pip install --upgrade pip"
         Write-Host "  run    `"$VenvPy`" -m pip install --upgrade setuptools wheel"
         Write-Host "  run    `"$VenvPy`" -m pip install --no-build-isolation -e `"$ProjectDir`""
+        if (Test-Path -LiteralPath $SourcesDir) {
+            Write-Host "  fetch  $SourcesDir (only the missing repositories and files)"
+        }
+        else {
+            Write-Host "  fetch  $SourcesDir (5 git clones and 9 downloads; needs git)"
+        }
         Write-Host "  run    ai-rulec build --formats all --asn-mode drop --out `"$OutDir`"$probeArgs"
         Write-Host "  run    ai-rulec apply --latest --meta `"$MetaPath`""
         if ($NoAgent) {
@@ -238,12 +244,6 @@ try {
         }
         else {
             Write-Host '  run    ai-rulec ui'
-        }
-        if (Test-Path -LiteralPath $SourcesDir) {
-            Write-Host "  fetch  $SourcesDir (only the missing repositories and files)"
-        }
-        else {
-            Write-Host "  fetch  $SourcesDir (5 git clones and 9 downloads; needs git)"
         }
         Write-Host ''
         Write-Host 'Dry run complete. Nothing was changed.' -ForegroundColor Green

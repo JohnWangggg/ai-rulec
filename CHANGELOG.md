@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.17.0] - 2026-11-23
+
+按 `docs/AUDIT.md` 整改。三条 P0 都是真实的阻断问题，全部已修。
+
+### Fixed
+
+- **跨平台文件锁**：`singbox_watch.py` 顶层 `import fcntl` 在 Windows 上直接 `ModuleNotFoundError`，而 `unittest discover`（CI 的 windows-latest）会连带失败。新增 `platforms.FileLock`（Unix `fcntl.flock`、Windows `msvcrt.locking`，均非阻塞），`watch` 与 `singbox-watch` 共用；`watch` 原先在 Windows 上捕获 `ImportError` 后静默不加锁，现在两条路径都有互斥。
+- **激活 profile 读取不再中断发现**：`_flclash_active_id()` 的 `plist.is_file()` 曾在 `try` 之外，沙盒或权限受限时 `PermissionError` 会打断整个 `discover_profiles()`。读取移入 `try`，异常一律降级为「未知激活项」。对应测试改为 mock `_active_hints()`，不再依赖宿主机真实 plist，并新增不可读 plist 的降级用例。
+- **`apply` 不再把校验副本写进生产 profile**：`apply_profile()` 原先把注入 `geodata-mode` 的 validation 副本覆盖写回同一临时文件，再原子替换到目标 —— 用户 profile 会实际带上校验期的键。现在校验在独立 `TemporaryDirectory` 里完成，失败的 profile 一个字节都不动。
+- **`apply` 的顺序**：拷贝规则与缓存修复原先都在 `mihomo -t` 校验之前，校验失败会留下已改动的 `AI-Rules`。现在顺序是「合并 → 校验 → 备份 → 拷规则 → 修缓存 → 原子替换」，任一环节失败即中止且不写 profile。
+- **`provider cache repair` 失败会中止 apply**：运行中的 config 仍指向旧哈希路径，修不好就替换 profile 等于制造一个加载不出 provider 的配置。
+- `python_executable()` 不再 `resolve()`：符号链接的 venv 会被解析成系统解释器，注册出去的服务跑在错误的环境里。
+- 安装器补装 `setuptools`：Python 3.12+ 的 venv 不再预装，`pip install --no-build-isolation -e .` 会直接 `ModuleNotFoundError`。
+- `service install` 在 Linux 安装器里显式传 `--python`，与 macOS/Windows 一致。
+- `service._default_meta()` 改用 `paths.resolve_meta()`：原先指向 `site-packages/out/mihomo-meta.yaml`，wheel 安装后不存在；`WorkingDirectory` 一并改为 meta 所在目录（无仓库时回落到项目目录）。
+- `service describe` 不再静默忽略 `--meta` / `--interval` / `--agents-interval` / `--python`，也不再为了打印而真的起子进程。
+- **`probe` 的 DoH 走代理**：`--probe-proxy auto` 原先只代理目标连接，DoH 解析仍直连；在只能经代理出网的网络里，解析失败会被记成 `dns_fail`，再被默认的 `--probe-gate both` 整条剔除。现在 DoH 与目标连接同一出口。
+- **`catalog` 死代码**：`hint_domain_mismatch` 因 `owner = hint_key or ...` 恒不触发；domain 级 `ip_asns` / `ip_cidrs` 从未写入，`broad_asn` 与置信度扣分永不生效。裸品牌别名（`meta`、`ai`）原先用 `endswith` 会误配到无关 TLD，改为锚定首段标签。
+- **中文 Windows 的计划任务状态**：`schtasks /Query /FO LIST` 输出本地化（`状态: 正在运行`），英文匹配恒 False。改为优先读 `Get-ScheduledTask` 的状态枚举，文本匹配补中英文关键词。
+- `health --attempts` 报的是实际上限而非实际次数，改为 `attempts`（实际）+ `attempts_limit`（上限）。
+- `health --proxy auto` 在端口未监听时不再逐次烧超时，改为与 watcher 一致地切直连并提示。
+- `ui` 的 AI 组过滤改用 `name == "AI" or name.startswith("AI-")`，不再把 `AIGC` / `AirPlay` 当 AI 组；页面补渲染 `warnings` / `errors`；子进程环境保留原 `PYTHONPATH`，未设 `SOURCE_ROOT` 时自动定位 `.sources`。
+- `paths.path_for_config()` 真正展开 `~`（此前 docstring 与文档都声称展开）。
+- `shutil.which` 全部收敛到 `platforms.which_exe`；`verify` 不再硬编码 `/Applications/Surge.app`，改用 `surge.find_surge_cli()`。
+- `build` 未显式 `--out` 时固定写 `./out`（此前会跟随 `last-build.json` 写到旧目录），读取侧统一 `paths.resolve_out()`。
+
+### Security
+
+- `scripts/check_secrets.py --history` 原先用 `--format=` 清空提交头，只扫 diff 正文，漏掉 author/committer 邮箱。新增 `scan_identities()`，历史扫描会检查提交身份，并跳过 GitHub noreply 地址。
+- 本仓库历史中的提交身份已重写为 noreply 地址（`git filter-branch`，标签同步重指）。
+
 ## [0.16.1] - 2026-11-23
 
 ### Fixed

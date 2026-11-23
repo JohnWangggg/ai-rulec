@@ -30,7 +30,7 @@ macOS 是参考实现，链路已在真机跑完整。Linux 与 Windows 的代�
 
 | 平台 | 命令 | 说明 |
 |---|---|---|
-| macOS | 双击 [install.command](install.command)，或 `./install.command` | 建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用 → 装 LaunchAgent → 开控制台 |
+| macOS | 双击 [install.command](install.command)，或 `./install.command` | 检查 Python → 建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 编译 → 应用 → 装 LaunchAgent → 开控制台（`1/8`–`8/8`） |
 | Linux | `./scripts/install.sh`（POSIX sh，`bash scripts/install.sh` 同效） | 同样的顺序，mihomo 只检查不安装（用发行版包或 GitHub release），服务注册为 systemd user unit |
 | Windows | `powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1` | 同样的顺序，mihomo 只检查不安装（`mihomo.exe` 需自行放入 PATH），服务注册为当前用户的计划任务 |
 
@@ -133,11 +133,13 @@ ai-rulec service uninstall              # 停止并移除
 | 命令 | 作用 | 关键安全开关 |
 |---|---|---|
 | `build` | 生成 catalog、coverage、每服务 provider、mihomo 配置 | `--asn-mode keep\|drop`、`--raw`、`--probe-proxy` |
+| `probe` | 探测 catalog 域名的 DNS/TLS/HTTP 可达性，写 `out/probes.json` | `--timeout`、`--workers`、`--limit`、`--proxy auto\|direct\|URL` |
 | `discover` | 找 FlClash profile/config，标记是否已管理 | `--root`、`--json` |
 | `status` | 一次性看 profile/缓存/端口/watch/agent 健康 | `--health`、`--json` |
 | `doctor` | 检查并可选修复 hashed provider cache | `--fix`、`--dry-run` |
 | `apply` | 合并进真实 profile，备份、拷贝 provider、mihomo 验证、原子写 | `--dry-run`、`--rules-last`、`--reset-proxies`、`--no-repair-cache` |
 | `watch` | 轮询 config/profile，重放丢失的 AI 组、修 cache、周期健康检查 | `--once`、`--no-reapply`、`--no-fix-cache`、`--health` |
+| `verify` | 校验 `out/` 里的 mihomo / sing-box / Surge 产物与 provider 是否自洽 | `--out` |
 | `rollback` | 恢复 apply 前的 profile/AI-Rules | `--list`、`--dry-run` |
 | `merge` | 只合并 base + meta，不碰 FlClash 数据目录 | `--target`、`--map` |
 | `surge` | 把 AI 组/规则补丁进现有 Surge profile，`surge-cli --check` 通过后才原子写 | `--dry-run`、`--rules-last`、`--no-backup` |
@@ -160,7 +162,8 @@ sing-box 没有 ASN 匹配器，`ip_asn` 会被丢弃（`asn_mode` 对 sing-box 
 
 `apply` 默认：
 
-- 规则插到用户 `MATCH` 之前，覆盖原有 `Ai+` 等分组；
+- 规则默认插在**最顶端**，排在用户自己的规则（含 `MATCH` 和原有 `Ai+` 等分组）之前，所以 AI 域名优先命中；加 `--rules-last` 则改为插在 `MATCH` 之前、用户规则之后；
+- 限定 `AI-*` 目标组时，`--latest` 选的是**客户端当前选中的 profile**（`profile.yaml` / config 里的激活项），只有拿不到激活信息时才退回「带 AI 组的已管理 profile」，最后才是文件列表里的第一个——不是按修改时间挑最新的文件；
 - 已有 `AI-*` 组幂等替换，未显式 mapping 时保留上次出口；
 - 备份 profile 和 `AI-Rules`；
 - 只在 mihomo 验证通过后原子替换；
@@ -306,7 +309,7 @@ sources.yaml                  # 本地覆盖（可选）
 scripts/fetch_sources.sh
 scripts/install.sh           # Linux 安装器（POSIX sh）
 scripts/install.ps1          # Windows 安装器（PowerShell）
-scripts/install_singbox_agent.sh
+scripts/install_singbox_agent.sh  # 可选：仅 macOS 的 sing-box/Hiddify 看护 LaunchAgent（不并入 service）
 scripts/check_secrets.py     # 仓库/历史敏感信息扫描
 scripts/check.sh             # compileall + unittest 的封装
 tests/test_core.py
@@ -336,10 +339,10 @@ tests/test_defaults.py
 
 本项目代码采用 **GPL-3.0-or-later**，见 [LICENSE](LICENSE)。选择 GPL 是为了和 mihomo/Clash 生态及 GPL-3.0 规则源保持兼容；你可以按 GPL 使用、修改、分发，包括商业使用，但没有担保。
 
-仓库**不包含**第三方规则数据或生成物：`.sources/`、`out*/` 都在 `.gitignore` 中。`sources.yaml` 只记录上游地址和转换规则，构建时由你本地拉取。对外分发 `out*/` 产物前，请单独确认每个来源的许可证：
+仓库**不包含**第三方规则数据或生成物：`.sources/`、`out*/` 都在 `.gitignore` 中。`sources.yaml` 只记录上游地址和转换规则，构建时由你本地拉取。`ai_rulec/data/sources.yaml` 内置的默认是 **7 个来源**：5 个整仓 `git clone`（v2fly、jinxinkai、G4free、ma-wenqian、SukkaW）+ 2 个单文件来源（blackmatrix7 的 6 个 AI 规则集、Loyalsoldier 的 `direct`/`proxy`/`reject`，共 9 个文件），与 `scripts/fetch_sources.sh`、`scripts/install.ps1` 完全一致；`MetaCubeX/meta-rules-dat` 不在其中，也不会被拉取。对外分发 `out*/` 产物前，请单独确认每个来源的许可证：
 
 - v2fly/domain-list-community：MIT，最安全。
-- Loyalsoldier/clash-rules、MetaCubeX/meta-rules-dat：GPL-3.0，与本项目代码兼容。
+- Loyalsoldier/clash-rules：GPL-3.0，与本项目代码兼容。
 - blackmatrix7/ios_rule_script：GPL-2.0，需确认是否允许升级到 GPL-3.0。
 - SukkaW/Surge、jinxinkai/clash-ai-rules、ma-wenqian/ai-proxy-rules：仓库元数据未给出明确/标准许可证，分发前逐项核对。
 - G4free/clash-ruleset：无 LICENSE，默认保留所有权利，不建议进入对外分发。

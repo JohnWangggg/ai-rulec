@@ -58,7 +58,8 @@ class RetryTests(unittest.TestCase):
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["status"], 200)
         self.assertEqual(opener.calls, 2)
-        self.assertEqual(result["attempts"], 3)
+        self.assertEqual(result["attempts"], 2)
+        self.assertEqual(result["attempts_limit"], 3)
 
     def test_persistent_transport_failure_uses_all_attempts(self) -> None:
         result, opener = self.run_check(

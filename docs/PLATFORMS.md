@@ -58,7 +58,9 @@ ai-rulec service uninstall   # 停止并移除，不动 profile 和产物
 
 每个动词都接受 `--meta PATH`、`--interval SEC`、`--agents-interval SEC`、`--python PATH`、`--dry-run`、`--json`。
 
-三个平台的安装器都只调用这个子命令，自己从不写 unit、也不调 `launchctl` / `systemctl` / `schtasks`。macOS 早期那个单独写 plist 的 `scripts/install_launchagent.sh` 已删除，`ai-rulec service install` 是唯一入口。
+三个平台的安装器都只调用这个子命令，自己从不写 unit、也不调 `launchctl` / `systemctl` / `schtasks`。macOS 早期那个单独写 plist 的 `scripts/install_launchagent.sh` 已删除，`ai-rulec service install` 是 watch 的唯一入口。
+
+仓库里还留着 `scripts/install_singbox_agent.sh`：它是**独立的、可选的 sing-box/Hiddify 专用助手**，不属于 `ai-rulec service`，也不会被任何安装器调用。只有当你想让 `ai-rulec singbox-watch` 常驻、又不想用统一的 `service` 子命令时才需要它——它只支持 macOS（LaunchAgent `com.ai-rulec.singbox-watch`），把 `<python> -m ai_rulec singbox-watch <config> --interval N --json` 注册为登录项，plist 写在 `~/Library/LaunchAgents/com.ai-rulec.singbox-watch.plist`，日志写到 `~/Library/Logs/ai-rulec-singbox-watch.log` / `.err.log`。默认配置路径是 Hiddify 的 `~/Library/Application Support/app.hiddify.com/data/current-config.json`；`--print` 只打印 plist，`--install` / `--uninstall` 才动系统。Linux / Windows 没有对应脚本，请用 `ai-rulec service install`（它跑的是 mihomo 的 watch）或自己写 unit / 计划任务。
 
 | 平台 | 承载方式 | 日志 |
 |---|---|---|
@@ -77,11 +79,11 @@ ai-rulec service uninstall   # 停止并移除，不动 profile 和产物
 
 | 平台 | 入口 | 说明 |
 |---|---|---|
-| macOS | `./install.command`（Finder 双击） | 建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 构建 → 应用 → `ai-rulec service install`（LaunchAgent）→ 开控制台 |
-| Linux | `scripts/install.sh` | 同样的顺序；mihomo 只检查不安装（发行版包或 GitHub release 二进制），服务用 systemd user unit；支持 `--dry-run` |
-| Windows | `scripts/install.ps1` | 同样的顺序；mihomo 只检查不安装（`mihomo.exe` 需自行放进 PATH），服务用 Task Scheduler；支持 `-DryRun` |
+| macOS | `./install.command`（Finder 双击） | 检查 Python → 建 venv → 装 mihomo（有 brew 时）→ 拉来源 → 构建 → 应用 → `ai-rulec service install`（LaunchAgent）→ 开控制台，编号 `1/8`–`8/8` |
+| Linux | `scripts/install.sh` | 同样的 8 步顺序；mihomo 只检查不安装（发行版包或 GitHub release 二进制），服务用 systemd user unit；支持 `--dry-run` |
+| Windows | `scripts/install.ps1` | 同样的 8 步顺序；mihomo 只检查不安装（`mihomo.exe` 需自行放进 PATH），服务用 Task Scheduler；支持 `-DryRun` |
 
-安装器失败时都会停在终端/窗口里显示具体报错，不静默跳过。三者的产物位置和命令行为一致，差异只在服务管理器与解释器路径。
+安装器失败时都会停在终端/窗口里显示具体报错，不静默跳过。三者的产物位置和命令行为一致，差异只在服务管理器与解释器路径；步骤编号统一为 `1/8`–`8/8`（第 7 步是后台服务，第 8 步是打开控制台，可用 `--no-agent` / `--no-ui` 跳过并显示「已跳过」）。
 
 ## 已知缺口
 

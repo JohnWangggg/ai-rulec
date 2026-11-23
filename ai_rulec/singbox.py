@@ -20,7 +20,7 @@ from . import platforms
 
 
 def find_singbox() -> str | None:
-    found = shutil.which("sing-box")
+    found = platforms.which_exe("sing-box")
     if found:
         return found
     for candidate in (

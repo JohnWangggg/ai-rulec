@@ -127,7 +127,7 @@ venv_hint() {
   esac
 }
 
-say "1/7 检查 Python"
+say "1/8 检查 Python"
 if [ -z "$PYTHON_BIN" ]; then
   PYTHON_BIN="$(command -v python3 2>/dev/null || true)"
 fi
@@ -153,7 +153,7 @@ if [ ! -x "$VENV_PY" ]; then
   fi
 fi
 
-say "2/7 准备虚拟环境"
+say "2/8 准备虚拟环境"
 if [ -x "$VENV_PY" ]; then
   note "已有 venv: $VENV"
 else
@@ -168,7 +168,7 @@ pip_install() {
 }
 
 pip_install --upgrade pip
-pip_install wheel
+pip_install --upgrade setuptools wheel
 pip_install "PyYAML>=6.0"
 pip_install --no-build-isolation -e "$ROOT"
 
@@ -180,7 +180,7 @@ if [ -x "$VENV_PY" ] && [ "$DRY" -eq 0 ]; then
   "$VENV/bin/ai-rulec" --version
 fi
 
-say "3/7 检查校验器 mihomo"
+say "3/8 检查校验器 mihomo"
 if [ "$WITH_MIHOMO" -eq 0 ]; then
   note "已跳过（--no-mihomo）：build 照常进行，运行时不做 mihomo -t 校验"
 elif command -v mihomo >/dev/null 2>&1; then
@@ -192,7 +192,7 @@ else
   note "装好后重新运行本脚本，或手动执行 ai-rulec verify"
 fi
 
-say "4/7 拉取规则源"
+say "4/8 拉取规则源"
 if [ -x "$ROOT/scripts/fetch_sources.sh" ]; then
   run "$ROOT/scripts/fetch_sources.sh" "$ROOT/.sources"
 elif command -v bash >/dev/null 2>&1; then
@@ -202,23 +202,24 @@ else
   die "找不到 $ROOT/scripts/fetch_sources.sh 或 bash"
 fi
 
-say "5/7 编译规则"
+say "5/8 编译规则"
 # shellcheck disable=SC2086  # PROBE_ARGS 需要按词拆成两个参数
 run "$VENV/bin/ai-rulec" build --formats all --asn-mode drop $PROBE_ARGS
 
-say "6/7 应用到当前代理客户端"
+say "6/8 应用到当前代理客户端"
 if ! run "$VENV/bin/ai-rulec" apply --latest; then
   die "apply 失败。先启动 FlClash/mihomo 再重试，或用 ai-rulec discover 确认客户端路径"
 fi
 
 if [ "$WITH_AGENT" -eq 1 ]; then
-  say "7/7 注册后台服务（systemd user unit）"
+  say "7/8 注册后台服务（systemd user unit）"
   if ! run "$VENV/bin/ai-rulec" service install \
-      --meta "$ROOT/out/mihomo-meta.yaml" --interval 5 --agents-interval 300; then
+      --meta "$ROOT/out/mihomo-meta.yaml" --python "$VENV_PY" \
+      --interval 5 --agents-interval 300; then
     die "service install 失败。查看：ai-rulec service describe"
   fi
 else
-  say "7/7 已跳过后台服务（--no-agent）"
+  say "7/8 已跳过后台服务（--no-agent）"
 fi
 
 cat <<EOF
@@ -232,6 +233,7 @@ cat <<EOF
 EOF
 
 if [ "$WITH_UI" -eq 1 ] && [ "$DRY" -eq 0 ]; then
+  say "8/8 打开本地控制台"
   exec "$VENV/bin/ai-rulec" ui
 fi
 exit 0

@@ -1,11 +1,12 @@
 #!/bin/bash
 # Double-click installer for macOS. Terminal opens, everything else is automatic:
-#   venv -> fetch sources -> build -> apply to the running client -> background watcher -> web console
+#   venv -> mihomo check -> fetch sources -> build -> apply to the running client -> background watcher -> web console
 #
 # Flags (for testing / advanced use):
 #   --no-agent   skip the launchd watcher
 #   --no-ui      do not open the web console at the end
 #   --skip-probe skip endpoint probing during build
+#   --no-mihomo  skip looking for / installing the mihomo validator
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -36,7 +37,7 @@ trap pause_on_error EXIT
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
-say "1/7 检查 Python"
+say "1/8 检查 Python"
 PYTHON="${PYTHON:-python3}"
 "$PYTHON" - <<'PY'
 import sys
@@ -52,16 +53,16 @@ pip_install() {
   fi
 }
 
-say "2/7 准备虚拟环境"
+say "2/8 准备虚拟环境"
 if [ ! -x "$VENV/bin/python3" ]; then
   "$PYTHON" -m venv "$VENV"
 fi
 pip_install --upgrade pip
-pip_install wheel
+pip_install --upgrade setuptools wheel
 pip_install --no-build-isolation -e "$ROOT"
 "$VENV/bin/ai-rulec" --version
 
-say "3/7 准备校验器 mihomo"
+say "3/8 准备校验器 mihomo"
 if [ "$WITH_MIHOMO" -eq 1 ]; then
   if command -v mihomo >/dev/null 2>&1; then
     mihomo -v | head -1
@@ -74,28 +75,28 @@ else
   echo "已跳过（--no-mihomo）"
 fi
 
-say "4/7 拉取规则源"
+say "4/8 拉取规则源"
 "$ROOT/scripts/fetch_sources.sh" "$ROOT/.sources"
 
-say "5/7 编译规则"
+say "5/8 编译规则"
 "$VENV/bin/ai-rulec" build --formats all --asn-mode drop $PROBE_ARGS
 
-say "6/7 应用到当前代理客户端"
+say "6/8 应用到当前代理客户端"
 "$VENV/bin/ai-rulec" apply --latest
 
 if [ "$WITH_AGENT" -eq 1 ]; then
-  say "7/7 安装后台看护"
+  say "7/8 安装后台看护"
   "$VENV/bin/ai-rulec" service install \
     --python "$VENV/bin/python3" \
     --meta "$ROOT/out/mihomo-meta.yaml" \
     --interval 5 \
     --agents-interval 300
 else
-  say "7/7 已跳过后台看护（--no-agent）"
+  say "7/8 已跳过后台看护（--no-agent）"
 fi
 
 if [ "$WITH_UI" -eq 1 ]; then
-  say "打开本地控制台"
+  say "8/8 打开本地控制台"
   exec "$VENV/bin/ai-rulec" ui
 fi
 

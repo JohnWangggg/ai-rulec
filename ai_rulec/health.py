@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import ssl
 import subprocess
@@ -15,6 +14,8 @@ from typing import Any
 from urllib.parse import urlsplit
 
 import yaml
+
+from . import platforms
 
 from .profile import discover_profiles, pick_profile
 
@@ -153,7 +154,9 @@ def check_http(
     excerpt = ""
     final_url = url
 
+    used = 0
     for attempt in range(attempts):
+        used = attempt + 1
         status = None
         error = None
         error_type = None
@@ -207,7 +210,8 @@ def check_http(
         error_type = None
     return {
         "type": "http",
-        "attempts": attempts,
+        "attempts": used,
+        "attempts_limit": attempts,
         "url": url,
         "final_url": final_url,
         "method": method,
@@ -230,7 +234,7 @@ def check_binary(
     if not binary:
         raise ValueError("binary check requires binary")
     started = time.monotonic()
-    path = shutil.which(binary)
+    path = platforms.which_exe(binary)
     if path is None and os.path.isabs(binary) and os.access(binary, os.X_OK):
         path = binary
     if path is None:

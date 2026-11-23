@@ -89,7 +89,7 @@ ai-rulec service install --meta out\mihomo-meta.yaml --python .venv\Scripts\pyth
 | 可变状态（最近一次 build、watch 状态） | `%LOCALAPPDATA%\ai-rulec\`（`paths.state_dir()`，可用 `AI_RULEC_STATE` 覆盖） |
 | 服务日志目录（`log_dir()`） | `%LOCALAPPDATA%\ai-rulec\logs\`（macOS/Linux 的守护进程写这里；**Windows 上计划任务不重定向输出，不会生成日志文件**，见下） |
 | 仓库内产物 | `out\`、`.sources\`、`.venv\`（都不随仓库分发） |
-| 客户端配置候选 | `%APPDATA%\FlClash`、`%APPDATA%\com.follow.clash`、`%LOCALAPPDATA%\com.follow.clash`、`%APPDATA%\io.github.clash-verge-rev.clash-verge-rev`、`%APPDATA%\clash-verge`、`%APPDATA%\Stash`、`%APPDATA%\mihomo`、`~\.config\clash`、`~\.config\mihomo` |
+| 客户端配置候选（按 `client_roots()` 的探测顺序） | `%APPDATA%\com.follow.clash`、`%LOCALAPPDATA%\com.follow.clash`、`%APPDATA%\FlClash`、`%APPDATA%\io.github.clash-verge-rev.clash-verge-rev`、`%APPDATA%\clash-verge`、`%LOCALAPPDATA%\io.github.clash-verge-rev.clash-verge-rev`、`%APPDATA%\Stash`、`%APPDATA%\mihomo`、`~\.config\clash`、`~\.config\mihomo` |
 
 候选顺序来自 `platforms.client_roots()`，**这些路径是按各客户端惯例推断的，没有在真机上逐个核实**。以 `ai-rulec discover` 的实际输出为准；找不到时用 `--root` 显式指定配置目录。
 
@@ -191,7 +191,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
 安装器显式把 TLS 设成 1.2（部分 Win10 1809 默认更低），不需要你改注册表。
 
 **路径太长 / 含中文导致奇怪失败**
-部分客户端和工具仍受 `MAX_PATH`（260）限制，即使系统开了长路径支持。把仓库放到短 ASCII 路径，例如 `C:\src\ai_proxy`，再重跑。中文路径本身是支持的：安装器设了 `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8`，但老版本客户端可能不认。
+部分客户端和工具仍受 `MAX_PATH`（260）限制，即使系统开了长路径支持。把仓库放到短 ASCII 路径，例如 `C:\src\ai-rulec`，再重跑。中文路径本身是支持的：安装器设了 `PYTHONUTF8=1` / `PYTHONIOENCODING=utf-8`，但老版本客户端可能不认。
 
 **规则文件变成了复制而不是符号链接**
 Windows 默认权限下普通用户不能建符号链接，`platforms.link_or_copy()` 会退回复制。路由语义相同，但源规则变化后不会自动同步——重跑 `apply` 或让 `watch` 处理即可。想用符号链接，得开「开发者模式」或用管理员终端。

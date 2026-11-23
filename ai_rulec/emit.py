@@ -76,7 +76,7 @@ def _write_provider(
 ) -> None:
     lines = _provider_lines(service, summary, behavior, asn_mode)
     header = [
-        f"# ai-rulec P0 — {service} ({behavior})",
+        f"# ai-rulec — {service} ({behavior})",
         f"# generated: {generated_at}",
         f"# domains: {len(summary.get('domains', []))}; "
         f"processes: {len(summary.get('processes', []))}; "
@@ -301,7 +301,7 @@ def emit_all(
             fh.write(
                 "\n".join(
                     [
-                        "# ai-rulec P1 — mihomo rule-provider fragment",
+                        "# ai-rulec — mihomo rule-provider fragment",
                         "# Merge rule-providers/proxy-groups/rules into your config, or use mihomo-config.yaml.",
                         f"# generated: {generated_at}",
                         "",
@@ -325,7 +325,7 @@ def emit_all(
             fh.write(
                 "\n".join(
                     [
-                        "# ai-rulec P1 — minimal mihomo config for local validation",
+                        "# ai-rulec — minimal mihomo config for local validation",
                         "# Replace DIRECT with your proxy/group before real use.",
                         f"# generated: {generated_at}",
                         "",

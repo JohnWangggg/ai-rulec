@@ -11,12 +11,13 @@
 
 ## 来源许可证
 
+`ai_rulec/data/sources.yaml` 内置、`scripts/fetch_sources.sh` 与 `scripts/install.ps1` 实际拉取的都是下面 **7 个来源**，没有别的。`MetaCubeX/meta-rules-dat` 常被误列进名单，但它既不在 `sources.yaml` 里，也没有任何拉取脚本下载它；要引入需先加来源并重新评估。
+
 | 来源 | 许可证 | 风险 | 备注 |
 |---|---|---|---|
 | v2fly/domain-list-community | MIT | 低 | 保留版权/许可声明即可 |
 | Loyalsoldier/clash-rules | GPL-3.0 | 高 | 聚合/分发派生产物可能触发 GPL |
 | blackmatrix7/ios_rule_script | GPL-2.0 | 高 | 同上；仅 GPL-2.0 |
-| MetaCubeX/meta-rules-dat | GPL-3.0 | 高 | 二进制/文本产物都可能被视为衍生 |
 | SukkaW/Surge | 未在仓库元数据中确认 | 中 | 使用前单独核对 |
 | jinxinkai/clash-ai-rules | README 称 MIT，仓库无 LICENSE | 中 | 以实际 LICENSE 为准 |
 | ma-wenqian/ai-proxy-rules | 自定义/未识别 | 中 | 需读 LICENSE 原文 |

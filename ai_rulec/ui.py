@@ -67,7 +67,7 @@ def _group_egress(profile_path: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     for group in data.get("proxy-groups") or []:
         name = group.get("name")
-        if isinstance(name, str) and name.startswith("AI"):
+        if isinstance(name, str) and (name == "AI" or name.startswith("AI-")):
             out[name] = [str(item) for item in group.get("proxies") or []]
     return out
 
@@ -102,6 +102,23 @@ def _state() -> dict[str, object]:
     }
 
 
+def _subprocess_env() -> dict[str, str]:
+    """Environment for a child ``ai-rulec``: keep, never replace, PYTHONPATH."""
+    env = dict(os.environ)
+    package_parent = str(Path(__file__).resolve().parent.parent)
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = (
+        package_parent + os.pathsep + existing if existing else package_parent
+    )
+    if "SOURCE_ROOT" not in env:
+        for candidate in (Path.cwd(), Path(package_parent)):
+            if (candidate / ".sources").is_dir():
+                env["SOURCE_ROOT"] = str(candidate / ".sources")
+                env.setdefault("AI_RULEC_PROJECT", str(candidate))
+                break
+    return env
+
+
 def _health(force: bool = False) -> dict[str, object]:
     now = time.time()
     with _state_lock:
@@ -113,7 +130,7 @@ def _health(force: bool = False) -> dict[str, object]:
         capture_output=True,
         text=True,
         timeout=180,
-        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+        env=_subprocess_env(),
     )
     try:
         data = json.loads(proc.stdout)
@@ -138,7 +155,7 @@ def _run_action(action: str) -> dict[str, object]:
             capture_output=True,
             text=True,
             timeout=900,
-            env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parent.parent)},
+            env=_subprocess_env(),
         )
     output = (proc.stdout or "").strip()
     try:
@@ -218,6 +235,9 @@ padding:12px;overflow:auto;max-height:260px;font-size:12px;white-space:pre-wrap}
 <h3>Agent 连通性 <span class="pill" id="health-at">–</span></h3>
 <table><thead><tr><th>Agent</th><th>状态</th><th>原因</th></tr></thead><tbody id="agents"></tbody></table>
 
+<h3>注意</h3>
+<table><tbody id="notes"></tbody></table>
+
 <h3>操作日志</h3>
 <pre id="log">就绪。</pre>
 </main>
@@ -247,6 +267,10 @@ async function loadState() {
   $('port').textContent = s.error ? '–' : `${s.port ?? '?'} ${s.port_open ? '✓' : '✗'}`;
   const w = s.watch || {};
   $('watch').textContent = s.error ? '–' : (w.last_action || '无状态') + (w.stale ? ' (stale)' : '');
+  const notes = [...(s.errors || []).map((x) => ['错误', x]), ...(s.warnings || []).map((x) => ['提示', x])];
+  $('notes').innerHTML = notes.map(([kind, text]) =>
+    `<tr><td class="tag">${esc(kind)}</td><td class="sub">${esc(text)}</td></tr>`).join('')
+    || '<tr><td colspan="2" style="color:var(--muted)">无</td></tr>';
   $('egress').innerHTML = Object.entries(s.egress || {}).map(([name, list]) =>
     `<tr><td class="tag">${esc(name)}</td><td class="tag">${esc(list.join(' → '))}</td></tr>`).join('')
     || '<tr><td colspan="2" style="color:var(--muted)">暂无 AI 组</td></tr>';

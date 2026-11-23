@@ -32,6 +32,23 @@ PARKED_MARKERS = (
 )
 
 
+def _doh_opener(proxy_url: str | None) -> urllib.request.OpenerDirector:
+    """Opener for the DNS-over-HTTPS fallback.
+
+    When a proxy is configured the DoH query goes through it, exactly like the
+    HTTPS check that follows. Otherwise the request stays direct on purpose:
+    honouring ``https_proxy`` from the environment would silently make the
+    probe depend on a variable the user never mentioned.
+    """
+    proxies = (
+        {"https": proxy_url, "http": proxy_url} if proxy_url else {}
+    )
+    return urllib.request.build_opener(
+        urllib.request.ProxyHandler(proxies),
+        urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+    )
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
@@ -64,7 +81,9 @@ def _system_lookup(domain: str) -> dict[str, Any]:
     }
 
 
-def _doh_lookup(domain: str, endpoint: str, timeout: float) -> dict[str, Any]:
+def _doh_lookup(
+    domain: str, endpoint: str, timeout: float, proxy_url: str | None = None
+) -> dict[str, Any]:
     started = time.monotonic()
     query = urllib.parse.urlencode({"name": domain, "type": "A"})
     request = urllib.request.Request(
@@ -72,7 +91,7 @@ def _doh_lookup(domain: str, endpoint: str, timeout: float) -> dict[str, Any]:
         headers={"Accept": "application/dns-json", "User-Agent": USER_AGENT},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with _doh_opener(proxy_url).open(request, timeout=timeout) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError, http.client.HTTPException) as exc:
         return {
@@ -115,7 +134,7 @@ def _doh_lookup(domain: str, endpoint: str, timeout: float) -> dict[str, Any]:
     }
 
 
-def _dns_lookup(domain: str) -> dict[str, Any]:
+def _dns_lookup(domain: str, proxy_url: str | None = None) -> dict[str, Any]:
     started = time.monotonic()
     system = _system_lookup(domain)
     resolvers: dict[str, Any] = {"system": system}
@@ -130,7 +149,7 @@ def _dns_lookup(domain: str) -> dict[str, Any]:
             "resolvers": resolvers,
         }
     for name, endpoint in DOH_RESOLVERS:
-        result = _doh_lookup(domain, endpoint, DOH_TIMEOUT)
+        result = _doh_lookup(domain, endpoint, DOH_TIMEOUT, proxy_url)
         resolvers[name] = result
         if result["ok"]:
             return {
@@ -370,7 +389,7 @@ def probe_domain(
     timeout: float = 4.0,
     proxy_url: str | None = None,
 ) -> dict[str, Any]:
-    dns = _dns_lookup(domain)
+    dns = _dns_lookup(domain, proxy_url)
     if not dns["ok"]:
         tls = {
             "ok": False,

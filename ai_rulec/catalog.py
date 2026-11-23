@@ -44,7 +44,13 @@ def _owner_from_domain(
     known: list[tuple[str, str]],
 ) -> str | None:
     for alias in sorted(aliases, key=len, reverse=True):
-        if domain == alias or domain.endswith("." + alias):
+        # A bare brand ("meta", "chatgpt") must anchor at the first label:
+        # matching it anywhere would claim unrelated TLDs such as "shop.meta".
+        # Aliases with a dot ("github-copilot.io") are real suffixes.
+        if "." in alias:
+            if domain == alias or domain.endswith("." + alias):
+                return aliases[alias]
+        elif domain == alias or domain.startswith(alias + "."):
             return aliases[alias]
     for known_domain, key in known:
         if domain == known_domain or domain.endswith("." + known_domain):
@@ -103,8 +109,6 @@ def build_catalog(
                 "services": {},
                 "sources": [],
                 "processes": [],
-                "ip_asns": [],
-                "ip_cidrs": [],
                 "requires_mitm": False,
                 "flags": set(),
             },
@@ -121,8 +125,9 @@ def build_catalog(
                 entry["requires_mitm"] = True
 
             hint_key = _service_from_hint(rule.service_hint, aliases)
-            owner = hint_key or _owner_from_domain(domain, aliases, known)
-            if hint_key and owner and hint_key != owner:
+            domain_owner = _owner_from_domain(domain, aliases, known)
+            owner = hint_key or domain_owner
+            if hint_key and domain_owner and hint_key != domain_owner:
                 entry["flags"].add("hint_domain_mismatch")
             if owner:
                 slot = entry["services"].setdefault(
@@ -239,8 +244,6 @@ def build_catalog(
             entry["sources"], key=lambda item: (item["source"], item["path"])
         )
         entry["processes"] = sorted(set(entry["processes"]))
-        entry["ip_asns"] = sorted(set(entry["ip_asns"]))
-        entry["ip_cidrs"] = sorted(set(entry["ip_cidrs"]))
 
         if is_shared_domain(domain) or entry["roles"].get("shared"):
             entry["flags"].add("shared")
@@ -261,8 +264,6 @@ def build_catalog(
             entry["flags"].add("unknown_service")
         if entry["requires_mitm"]:
             entry["flags"].add("mitm")
-        if any(asn in BROAD_ASNS for asn in entry["ip_asns"]):
-            entry["flags"].add("broad_asn")
         if any(src.get("set") == "reject" for src in entry["sources"]):
             entry["flags"].add("reject_set")
         if any(_is_stale(src["source"], source_meta) for src in entry["sources"]):
@@ -279,8 +280,6 @@ def build_catalog(
             confidence -= 0.2
         if "multi_service" in entry["flags"]:
             confidence -= 0.15
-        if "broad_asn" in entry["flags"]:
-            confidence -= 0.2
         if "unknown_service" in entry["flags"]:
             confidence -= 0.2
         entry["confidence"] = round(max(0.0, min(1.0, confidence)), 3)

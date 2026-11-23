@@ -34,7 +34,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from . import platforms
+from . import paths, platforms
 
 MACOS_LABEL = "com.ai-rulec.watch"
 LINUX_UNIT = "ai-rulec-watch.service"
@@ -56,12 +56,23 @@ class ServiceError(RuntimeError):
 
 
 def _project_dir() -> Path:
-    """Directory that owns the ``ai_rulec`` package (used as WorkingDirectory)."""
+    """Directory that owns the ``ai_rulec`` package (a checkout, or site-packages)."""
     return Path(__file__).resolve().parents[1]
 
 
 def _default_meta() -> Path:
-    return _project_dir() / "out" / "mihomo-meta.yaml"
+    """Meta file of the last build, or ``./out`` when nothing was recorded."""
+    return paths.resolve_meta()
+
+
+def _work_dir(meta_path: Path) -> Path:
+    """Directory the service runs in.
+
+    A wheel install has no checkout: ``site-packages`` is a read-only place to
+    make a working directory, and ``out/`` does not exist there. The meta file
+    always does, so its own directory is the one directory we know is right.
+    """
+    return meta_path.parent if meta_path.parent.is_dir() else _project_dir()
 
 
 def _watch_argv(
@@ -133,7 +144,6 @@ def _report(action: str) -> dict[str, Any]:
         "action": action,
         "platform": family,
         "backend": _BACKENDS.get(family, "unsupported"),
-        "working_dir": str(_project_dir()),
         "errors": [],
         "warnings": [],
         "notes": [],
@@ -194,11 +204,49 @@ def _tail(path: Path, limit: int = 15) -> list[str]:
     return text.splitlines()[-limit:]
 
 
+ABSENT_MARKERS = (
+    "cannot find",
+    "not find",
+    "no such file",
+    "not loaded",
+    "does not exist",
+    "不能找到",
+    "找不到",
+    "不存在",
+)
+
+# ``Get-ScheduledTask`` reports the state as an enum, so the number is the same
+# in every UI language; ``schtasks /FO LIST`` localises the label itself.
+TASK_STATE_RUNNING = 4
+
+
 def _looks_absent(text: str) -> bool:
+    lowered = text.lower()
+    return any(marker in lowered for marker in ABSENT_MARKERS)
+
+
+def _windows_task_state() -> int | None:
+    """State of the scheduled task as an enum value, or None when unknown."""
+    pwsh = platforms.which_exe("powershell") or platforms.which_exe("pwsh")
+    if pwsh is None:
+        return None
+    script = (
+        "$t = Get-ScheduledTask -TaskName '%s' -ErrorAction SilentlyContinue; "
+        "if ($null -eq $t) { '' } else { [int]$t.State }" % WINDOWS_TASK
+    )
+    try:
+        proc = _run([pwsh, "-NoProfile", "-NonInteractive", "-Command", script])
+    except ServiceError:
+        return None
+    text = (proc.stdout or "").strip()
+    return int(text) if text.isdigit() else None
+
+
+def _task_running_from_text(text: str) -> bool:
     lowered = text.lower()
     return any(
         marker in lowered
-        for marker in ("cannot find", "not find", "no such file", "not loaded", "does not exist")
+        for marker in ("running", "正在运行", "正在執行")
     )
 
 
@@ -239,6 +287,8 @@ def install(
     report.update(
         {
             "meta": str(plan["meta"]),
+            "work_dir": str(plan["work_dir"]),
+            "working_dir": str(plan["work_dir"]),
             "argv": plan["argv"],
             "python": plan["argv"][0],
             "command": subprocess.list2cmdline(plan["argv"]),
@@ -261,6 +311,7 @@ def _plan(
     agents_interval: float,
     python: str | None,
     report: dict[str, Any],
+    probe_pyyaml: bool = True,
 ) -> dict[str, Any] | None:
     """Validate the interpreter and meta file, then build the argv."""
     exe = platforms.python_executable()
@@ -287,17 +338,19 @@ def _plan(
         return None
     meta_path = meta_path.resolve()
 
-    yaml_ok, yaml_detail = _check_pyyaml(exe)
-    if not yaml_ok:
-        _fail(
-            report,
-            f"{exe} cannot import PyYAML ({yaml_detail}); "
-            "pass --python with an interpreter that has PyYAML installed",
-        )
-        return None
+    if probe_pyyaml:
+        yaml_ok, yaml_detail = _check_pyyaml(exe)
+        if not yaml_ok:
+            _fail(
+                report,
+                f"{exe} cannot import PyYAML ({yaml_detail}); "
+                "pass --python with an interpreter that has PyYAML installed",
+            )
+            return None
 
     return {
         "meta": meta_path,
+        "work_dir": _work_dir(meta_path),
         "argv": _watch_argv(meta_path, interval, agents_interval, exe),
         "interval": float(interval),
         "agents_interval": float(agents_interval),
@@ -305,13 +358,9 @@ def _plan(
 
 
 def _check_pyyaml(exe: str) -> tuple[bool, str]:
-    """The service runs ``ai_rulec``, which imports yaml at startup.
-
-    Run from the project directory so the probe sees the same working directory
-    the unit will use.
-    """
+    """The service runs ``ai_rulec``, which imports yaml at startup."""
     try:
-        proc = _run([exe, "-c", "import yaml"], timeout=30.0, cwd=str(_project_dir()))
+        proc = _run([exe, "-c", "import yaml"], timeout=30.0)
     except ServiceError as exc:
         return False, str(exc)
     if proc.returncode != 0:
@@ -319,13 +368,12 @@ def _check_pyyaml(exe: str) -> tuple[bool, str]:
     return True, ""
 
 
-def _install_launchd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool) -> None:
-    plist = _macos_plist()
+def _macos_payload(argv: list[str], work_dir: Path) -> dict[str, Any]:
     out_log, err_log = _log_paths()
-    payload = {
+    return {
         "Label": MACOS_LABEL,
-        "ProgramArguments": plan["argv"],
-        "WorkingDirectory": str(_project_dir()),
+        "ProgramArguments": argv,
+        "WorkingDirectory": str(work_dir),
         "EnvironmentVariables": {"PATH": SERVICE_PATH, "PYTHONUNBUFFERED": "1"},
         "RunAtLoad": True,
         "KeepAlive": True,
@@ -334,6 +382,12 @@ def _install_launchd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         "StandardOutPath": str(out_log),
         "StandardErrorPath": str(err_log),
     }
+
+
+def _install_launchd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool) -> None:
+    plist = _macos_plist()
+    out_log, err_log = _log_paths()
+    payload = _macos_payload(plan["argv"], plan["work_dir"])
     commands = [
         ["launchctl", "bootout", _launchd_target()],
         ["launchctl", "bootstrap", f"gui/{_uid()}", str(plist)],
@@ -387,7 +441,7 @@ def _systemd_arg(arg: str) -> str:
     return f'"{escaped}"'
 
 
-def _systemd_unit(argv: list[str], out_log: Path, err_log: Path) -> str:
+def _systemd_unit(argv: list[str], out_log: Path, err_log: Path, work_dir: Path) -> str:
     exec_start = " ".join(_systemd_arg(item) for item in argv)
     return "\n".join(
         [
@@ -397,7 +451,7 @@ def _systemd_unit(argv: list[str], out_log: Path, err_log: Path) -> str:
             "",
             "[Service]",
             "Type=simple",
-            f"WorkingDirectory={_systemd_arg(str(_project_dir()))}",
+            f"WorkingDirectory={_systemd_arg(str(work_dir))}",
             f"ExecStart={exec_start}",
             "Restart=always",
             "RestartSec=10",
@@ -444,7 +498,7 @@ def _install_systemd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         out_log.parent.mkdir(parents=True, exist_ok=True)
         _write_atomic(
             unit,
-            _systemd_unit(plan["argv"], out_log, err_log).encode("utf-8"),
+            _systemd_unit(plan["argv"], out_log, err_log, plan["work_dir"]).encode("utf-8"),
         )
         for argv in commands:
             proc = _run(argv)
@@ -605,9 +659,15 @@ def _status_schtasks(report: dict[str, Any]) -> None:
     if proc.returncode != 0:
         report["detail"] = f"{WINDOWS_TASK} is not registered"
         return
-    lines = [line.strip() for line in (proc.stdout or "").splitlines() if line.strip()]
+    output = proc.stdout or ""
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
     report["detail"] = " ".join(lines[:4])
-    report["running"] = "running" in (proc.stdout or "").lower()
+    state = _windows_task_state()
+    if state is not None:
+        report["running"] = state == TASK_STATE_RUNNING
+        report["state"] = state
+    else:
+        report["running"] = _task_running_from_text(output)
 
 
 # --------------------------------------------------------------------------- #
@@ -730,17 +790,35 @@ def _uninstall_schtasks(report: dict[str, Any], dry_run: bool) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def describe() -> dict[str, Any]:
+def describe(
+    *,
+    meta: str | None = None,
+    interval: float = DEFAULT_INTERVAL,
+    agents_interval: float = DEFAULT_AGENTS_INTERVAL,
+    python: str | None = None,
+) -> dict[str, Any]:
     """What would be installed and run on this machine.  Writes nothing."""
     report = _report("describe")
-    exe = platforms.python_executable()
-    meta = _default_meta()
-    argv = _watch_argv(meta, DEFAULT_INTERVAL, DEFAULT_AGENTS_INTERVAL, exe)
+    plan = _plan(
+        meta=meta,
+        interval=interval,
+        agents_interval=agents_interval,
+        python=python,
+        report=report,
+        probe_pyyaml=False,
+    )
+    if plan is None:
+        return report
+    exe = plan["argv"][0]
+    meta_path = plan["meta"]
+    argv = plan["argv"]
     report.update(
         {
             "python": exe,
-            "meta": str(meta),
-            "meta_exists": meta.is_file(),
+            "meta": str(meta_path),
+            "meta_exists": meta_path.is_file(),
+            "work_dir": str(plan["work_dir"]),
+            "working_dir": str(plan["work_dir"]),
             "argv": argv,
             "command": subprocess.list2cmdline(argv),
         }
@@ -754,6 +832,7 @@ def describe() -> dict[str, Any]:
                 "unit": str(plist),
                 "unit_kind": "plist",
                 "unit_exists": plist.is_file(),
+                "payload": _macos_payload(plan["argv"], plan["work_dir"]),
                 "logs": {"out": str(out_log), "err": str(err_log)},
                 "commands": [
                     ["launchctl", "bootout", _launchd_target()],
