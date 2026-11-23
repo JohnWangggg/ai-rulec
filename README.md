@@ -162,7 +162,7 @@ sing-box 没有 ASN 匹配器，`ip_asn` 会被丢弃（`asn_mode` 对 sing-box 
 `apply` 默认：
 
 - 规则默认插在**最顶端**，排在用户自己的规则（含 `MATCH` 和原有 `Ai+` 等分组）之前，所以 AI 域名优先命中；加 `--rules-last` 则改为插在 `MATCH` 之前、用户规则之后；
-- 限定 `AI-*` 目标组时，`--latest` 选的是**客户端当前选中的 profile**（`profile.yaml` / config 里的激活项），只有拿不到激活信息时才退回「带 AI 组的已管理 profile」，最后才是文件列表里的第一个——不是按修改时间挑最新的文件；
+- 限定 `AI-*` 目标组时，`--latest` 优先选 **FlClash 当前选中的 profile**（读偏好设置里的 `currentProfileId`）；读不到激活信息时退回「带 AI 组的已管理 profile」，最后才是文件列表里的第一个——不是按修改时间挑最新的文件；
 - 已有 `AI-*` 组幂等替换，未显式 mapping 时保留上次出口；
 - 备份 profile 和 `AI-Rules`；
 - 只在 mihomo 验证通过后原子替换；
@@ -240,7 +240,7 @@ python3 -m ai_rulec health --proxy auto
 python3 -m ai_rulec health --compare   # 同时跑代理/直连，区分 proxy 断与上游断
 ```
 
-`config/agents.yaml` 里每个 agent 由 `checks` 组成：
+`ai_rulec/data/agents.yaml` 里每个 agent 由 `checks` 组成（仓库里的 `config/agents.yaml` 是同名覆盖）：
 
 - `http`：URL + `expect` 状态码；`required: false` 失败只降级，不判 down。
 - `binary`：本地命令 + `--version`；未安装且 optional 时跳过。
@@ -248,7 +248,7 @@ python3 -m ai_rulec health --compare   # 同时跑代理/直连，区分 proxy �
 
 - 传输类错误（timeout / TLS / network）自动重试，最多 3 次；HTTP 状态码不重试。`retries: 0` 可关闭。
 
-状态：`ok` / `degraded`（可选检查失败）/ `down`（必选检查失败）。它证明端点可达和本地 CLI 存在，不等价于完整 agent 功能测试。
+状态：`ok` / `degraded`（可选检查失败）/ `down`（必选检查失败）/ `skipped`（客户端未运行或可选二进制未安装）。它证明端点可达和本地 CLI 存在，不等价于完整 agent 功能测试。
 
 `status` 可直接带健康检查，一条命令看全链路：
 
