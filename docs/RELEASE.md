@@ -75,4 +75,4 @@ cd /tmp && /tmp/venv/bin/ai-rulec health --list
 - [ ] GitHub Releases 附 wheel 与源码包
 - [ ] PyPI 上传（`twine upload`）—— 发布前再跑一次第 3、4 节
 - [ ] 仓库开启 Private vulnerability reporting
-- [ ] 同步 `docs/AUDIT.md` 的整改状态与本文的版本号
+- [ ] 确认内部审查报告的整改状态与本文的版本号一致

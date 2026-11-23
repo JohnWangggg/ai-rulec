@@ -18,11 +18,11 @@
 
 ### Docs
 
-- `PROJECT.md` / `RELEASE.md` 同步 0.17.1 与 169 个用例；README 目录树补 `test_catalog.py` / `test_probe.py` / `docs/AUDIT.md`，Agent 健康检查段补跳过契约；`service` 子命令按动作拆分选项；两个安装器的 `--no-ui` 均打印「已跳过」。
+- `PROJECT.md` / `RELEASE.md` 同步 0.17.1 与 169 个用例；README 目录树补 `test_catalog.py` / `test_probe.py` / `test_check_secrets.py`，Agent 健康检查段补跳过契约；`service` 子命令按动作拆分选项；两个安装器的 `--no-ui` 均打印「已跳过」。
 
 ## [0.17.0] - 2026-11-23
 
-按 `docs/AUDIT.md` 整改。三条 P0 都是真实的阻断问题，全部已修。
+按内部审查报告整改。三条 P0 都是真实的阻断问题，全部已修。
 
 ### Fixed
 
