@@ -32,3 +32,4 @@
 5. **无许可证/自定义许可证不默认分发**：G4free 无 LICENSE；Sukka、jinx、ma-wenqian 的元数据不标准。保留为本地可选来源，分发前逐项核对。
 6. **保留 provenance**：每个 provider 的 source、commit、sha256 已写入 `lock.json`；这是许可证审计和故障回滚的基础。
 7. **不要只改格式就宣称避开 GPL**：域名集合的实质性选择/编排可能构成衍生；让法务看具体产物，而不是看脚本。
+8. **公开产物有独立开关**：`sources.yaml` 每个来源带 `license` 与 `redistributable`；`build --redistributable-only` 只保留 `redistributable: true` 的来源，`lock.json` 记录 `redistributable_only`、`excluded_sources` 与每个来源的 `license`。GitHub Actions 的 `publish-tower` 只用这个模式发布 Tower 产物（当前仅 MIT 的 v2fly）。要放宽，先逐来源核对许可证并改这里的评估，不要直接改工作流。

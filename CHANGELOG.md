@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.18.1] - 2026-11-23
+
+把 Tower 产物发布成固定 HTTPS 地址，同时不越过数据许可证边界。
+
+### Added
+
+- **`build --redistributable-only`**：只使用 `sources.yaml` 里 `redistributable: true` 的来源；被排除的来源写进 `lock.json` 的 `excluded_sources`，每个来源的 `license` 与 `redistributable` 也进入 lock。
+- **`publish-tower` 工作流**：每天 03:17 UTC 与手动触发，抓取来源、构建、`verify`，然后把 `ai-rules.yaml` 上传到固定 release 标签 `tower-latest`。Tower 里粘贴 `https://github.com/JohnWangggg/ai-rulec/releases/download/tower-latest/ai-rules.yaml` 即可。
+- 公开产物当前只含 **MIT 的 v2fly**。GPL-2.0-only（bm7）、无许可证（G4free）、许可证未确认（Sukka / jinx / ma-wenqian）与 GPL-3.0 聚合源（Loyalsoldier）都不进入公开文件；本地完整构建不受影响。
+
+### Docs
+
+- README 的 Tower 段补「链接导入」与固定地址；`docs/LICENSE-ASSESSMENT.md` 增加公开产物开关的约束。
+
 ## [0.18.0] - 2026-11-23
 
 新增 `tower` 格式：一份自包含的 Clash 规则方案，直接导入 Tower。

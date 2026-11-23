@@ -1,0 +1,67 @@
+name: publish-tower
+
+# Publishes a Tower-importable rule scheme to a fixed release asset URL:
+#   https://github.com/<owner>/<repo>/releases/download/tower-latest/ai-rules.yaml
+#
+# Only sources marked `redistributable: true` are used. Everything else
+# (GPL-2.0-only, unlicensed, unconfirmed) stays local; see
+# docs/LICENSE-ASSESSMENT.md before widening this.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-tower
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip PyYAML
+
+      - name: Fetch rule sources
+        run: bash scripts/fetch_sources.sh "$GITHUB_WORKSPACE/.sources"
+
+      - name: Build the Tower scheme
+        run: |
+          python -m ai_rulec build \
+            --formats tower \
+            --asn-mode drop \
+            --redistributable-only \
+            --out out-tower
+
+      - name: Verify the artifact
+        run: python -m ai_rulec verify --out out-tower
+
+      - name: Publish the release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          asset=out-tower/tower/ai-rules.yaml
+          test -s "$asset"
+          if ! gh release view tower-latest >/dev/null 2>&1; then
+            gh release create tower-latest \
+              --title "Tower rule scheme (auto-published)" \
+              --notes "Self-contained Clash rule scheme for Tower. Built only from MIT-licensed sources. Import by URL or file: Rules -> + -> Link/File." \
+              --prerelease
+          fi
+          gh release upload tower-latest "$asset" --clobber
+
+      - name: Print the import URL
+        run: |
+          echo "Tower import URL:"
+          echo "https://github.com/${{ github.repository }}/releases/download/tower-latest/ai-rules.yaml"

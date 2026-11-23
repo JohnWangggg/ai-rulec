@@ -90,6 +90,14 @@ def _build(args: argparse.Namespace) -> int:
     sources = _load_yaml(sources_path)
     if not services:
         raise SystemExit(f"{services_path}: no services")
+    excluded_sources: list[str] = []
+    if args.redistributable_only:
+        from .sources import filter_redistributable
+
+        try:
+            sources, excluded_sources = filter_redistributable(sources)
+        except ValueError as exc:
+            raise SystemExit(f"build: {exc}") from exc
 
     formats = tuple(
         ("mihomo", "sing-box", "surge", "tower")
@@ -128,6 +136,11 @@ def _build(args: argparse.Namespace) -> int:
             rules, services, source_meta, probes=probe_results["domains"]
         )
 
+    if args.redistributable_only:
+        # Re-apply after the probe rebuild: build_catalog returns a fresh dict.
+        catalog["redistributable_only"] = True
+        catalog["excluded_sources"] = excluded_sources
+
     catalog_path = os.path.join(args.out, "catalog.json")
     coverage_path = os.path.join(args.out, "coverage.json")
     _write_json(catalog_path, catalog)
@@ -149,6 +162,8 @@ def _build(args: argparse.Namespace) -> int:
         "ok": True,
         "strict": not args.raw,
         "formats": list(formats),
+        "redistributable_only": bool(args.redistributable_only),
+        "excluded_sources": excluded_sources,
         "summary": coverage["summary"],
         "outputs": {
             "catalog": catalog_path,
@@ -1041,6 +1056,11 @@ def main(argv: list[str] | None = None) -> int:
         choices=("keep", "drop"),
         default="keep",
         help="keep IP-ASN rules or drop them (drop avoids the ASN.mmdb dependency)",
+    )
+    build.add_argument(
+        "--redistributable-only",
+        action="store_true",
+        help="only use sources marked redistributable (for published artifacts)",
     )
     build.add_argument(
         "--raw",

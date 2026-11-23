@@ -4,6 +4,8 @@ default_root: .sources
 sources:
   - name: v2fly
     type: v2fly
+    license: MIT
+    redistributable: true
     root: v2fly_domain-list-community
     files:
       openai: data/openai
@@ -18,6 +20,8 @@ sources:
 
   - name: jinx
     type: clash_yaml
+    license: MIT (README only; no LICENSE file)
+    redistributable: false
     root: jinxinkai_clash-ai-rules
     files:
       openai: OpenAI.yaml
@@ -30,6 +34,8 @@ sources:
 
   - name: bm7
     type: clash_yaml
+    license: GPL-2.0
+    redistributable: false
     root: bm7
     files:
       openai: OpenAI.yaml
@@ -39,6 +45,8 @@ sources:
 
   - name: g4free
     type: mixed
+    license: none
+    redistributable: false
     root: G4free_clash-ruleset
     files:
       openai: ruleset/ChatGPT.yaml
@@ -47,6 +55,8 @@ sources:
 
   - name: mawq
     type: mixed
+    license: custom/unrecognized
+    redistributable: false
     root: ma-wenqian_ai-proxy-rules
     files:
       openai: rules/openai.list
@@ -54,12 +64,16 @@ sources:
 
   - name: sukka
     type: surge
+    license: unconfirmed
+    redistributable: false
     root: SukkaW_Surge
     files:
       _aggregate: Source/non_ip/ai.conf
 
   - name: loyalsoldier
     type: loyalsoldier
+    license: GPL-3.0
+    redistributable: false
     root: loyalsoldier
     files:
       proxy: proxy.txt

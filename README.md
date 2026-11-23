@@ -187,7 +187,16 @@ python3 -m ai_rulec build --formats tower --asn-mode drop
 # out/tower/ai-rules.yaml
 ```
 
-导入：Tower → 规则 → `+` → 文件 → 选 `out/tower/ai-rules.yaml`。也可以把文件放到任意 HTTPS 地址后粘贴链接（Tower 只收 HTTPS，网页地址会自动转 raw，上限 8 MB）。
+导入方式二选一：
+
+- **文件**：Tower → 规则 → `+` → 文件 → 选 `out/tower/ai-rules.yaml`；
+- **链接**：Tower → 规则 → `+` → 链接 → 粘贴下面的地址（Tower 只收 HTTPS，网页地址会自动转 raw，上限 8 MB）：
+
+```text
+https://github.com/JohnWangggg/ai-rulec/releases/download/tower-latest/ai-rules.yaml
+```
+
+这个地址由 [`.github/workflows/publish-tower.yml`](.github/workflows/publish-tower.yml) 每天自动刷新，并且**只使用标记为 `redistributable: true` 的来源**（当前只有 MIT 的 v2fly）。GPL-2.0-only、无许可证、许可证未确认的来源不会进入公开产物；原因见 [docs/LICENSE-ASSESSMENT.md](docs/LICENSE-ASSESSMENT.md)。自己构建完整版仍然是 `python3 -m ai_rulec build --formats tower --asn-mode drop`（不加 `--redistributable-only`）。
 
 行为：
 

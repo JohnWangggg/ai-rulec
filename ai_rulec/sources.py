@@ -26,6 +26,30 @@ KNOWN_RULE_TYPES = {
 }
 
 
+def filter_redistributable(
+    sources_cfg: dict[str, Any],
+) -> tuple[dict[str, Any], list[str]]:
+    """Drop sources whose data cannot be redistributed.
+
+    A source is only safe to publish when its config marks
+    ``redistributable: true``. Everything else stays local: the licence
+    assessment lists GPL-2.0-only, unlicensed and unconfirmed repos.
+    """
+    kept = []
+    dropped = []
+    for source in sources_cfg.get("sources") or []:
+        if source.get("redistributable") is True:
+            kept.append(source)
+        else:
+            dropped.append(str(source.get("name")))
+    if not kept:
+        raise ValueError(
+            "no redistributable sources configured; mark a source with "
+            "`redistributable: true` in sources.yaml"
+        )
+    return {**sources_cfg, "sources": kept}, dropped
+
+
 def _clean(raw: str) -> str | None:
     s = raw.strip()
     if not s or s.startswith("#") or s == "payload:":
@@ -334,14 +358,22 @@ def build_source_meta(
 ) -> dict[str, Any]:
     meta: dict[str, Any] = {}
     root_by_source: dict[str, str] = {}
+    source_by_name: dict[str, dict[str, Any]] = {}
     for entry in entries:
         src = entry["src"]
         name = src["name"]
         root = entry["root"]
         root_by_source[name] = root
+        source_by_name[name] = src
         item = meta.setdefault(
             name,
-            {"root": root, "commit": _git_commit(root), "files": {}},
+            {
+                "root": root,
+                "commit": _git_commit(root),
+                "license": src.get("license"),
+                "redistributable": bool(src.get("redistributable")),
+                "files": {},
+            },
         )
         if entry["path"] not in item["files"]:
             item["files"][entry["path"]] = _file_meta(entry["path"], root, max_age_days)
@@ -350,9 +382,16 @@ def build_source_meta(
         root = root_by_source.get(source_name)
         if not root or not os.path.exists(path):
             continue
+        src = source_by_name.get(source_name, {})
         item = meta.setdefault(
             source_name,
-            {"root": root, "commit": _git_commit(root), "files": {}},
+            {
+                "root": root,
+                "commit": _git_commit(root),
+                "license": src.get("license"),
+                "redistributable": bool(src.get("redistributable")),
+                "files": {},
+            },
         )
         if path not in item["files"]:
             item["files"][path] = _file_meta(path, root, max_age_days)

@@ -405,11 +405,15 @@ def _write_lock(
         "probe_gate": probe_gate,
         "asn_mode": asn_mode,
         "formats": list(formats),
+        "redistributable_only": bool(catalog.get("redistributable_only")),
+        "excluded_sources": catalog.get("excluded_sources") or [],
         "excluded": excluded,
         "probes": probes.get("summary") if probes else None,
         "sources": {
             name: {
                 "commit": source.get("commit"),
+                "license": source.get("license"),
+                "redistributable": source.get("redistributable"),
                 "files": {
                     path: {
                         "sha256": item.get("sha256"),

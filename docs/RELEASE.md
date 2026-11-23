@@ -8,7 +8,7 @@
 - [x] 定位：AI 服务规则的编译器与生命周期层（见 [PROJECT.md](PROJECT.md)）
 - [x] 边界写清：不是节点商、不是 key 池、不是 MITM 产品、不是规则库
 
-当前版本：**0.18.0**（`ai_rulec/__init__.py` 的 `__version__`，`pyproject.toml` 动态读取）。已经发布过的 tag 是 `v0.16.0`、`v0.16.1`、`v0.17.1`（以及更早的首次公开发布）；`ui` / `service` / 跨平台安装器都已进入 CHANGELOG 并随 `v0.17.1` 发布。发布前先把本文的版本号、wheel 名和测试数与实际对齐。
+当前版本：**0.18.1**（`ai_rulec/__init__.py` 的 `__version__`，`pyproject.toml` 动态读取）。已经发布过的 tag 是 `v0.16.0`、`v0.16.1`、`v0.17.1`、`v0.17.2`、`v0.18.0`（以及更早的首次公开发布）；`ui` / `service` / 跨平台安装器都已进入 CHANGELOG 并随 `v0.17.1` 发布。发布前先把本文的版本号、wheel 名和测试数与实际对齐。
 
 ## 2. 文档
 
@@ -44,7 +44,7 @@ python3 -m venv /tmp/venv && /tmp/venv/bin/pip install /tmp/wheel/*.whl
 cd /tmp && /tmp/venv/bin/ai-rulec health --list
 ```
 
-- [x] wheel 构建通过（`ai_rulec-0.18.0-py3-none-any.whl`）
+- [x] wheel 构建通过（`ai_rulec-0.18.1-py3-none-any.whl`）
 - [x] 元数据含 `License: GPL-3.0-or-later`、`Project-URL`、`License-File`（`license = { text = ... }` 走的是 setuptools 65 兼容路径；要 `License-Expression` 需把构建要求提到 setuptools>=77）
 - [x] 内置 `ai_rulec/data/{services,agents,sources}.yaml`，脱离仓库可运行
 - [x] 仓库外的 `build` 给出可操作的 `SOURCE_ROOT` 提示（不是 traceback）
@@ -55,7 +55,7 @@ cd /tmp && /tmp/venv/bin/ai-rulec health --list
 ./scripts/check.sh          # compileall + unittest
 ```
 
-- [x] 全部单元测试通过（`unittest discover -s tests` 共发现 **177** 个用例；macOS 上少量用例由 `skipUnless` 跳过，Linux / Windows 专属用例在三平台 CI 矩阵各自执行）
+- [x] 全部单元测试通过（`unittest discover -s tests` 共发现 **181** 个用例；macOS 上少量用例由 `skipUnless` 跳过，Linux / Windows 专属用例在三平台 CI 矩阵各自执行）
 - [x] 真实 FlClash：AI 组与规则已合并进在用的订阅 profile（组数/规则数随订阅变化，实测 15 组 / 565 规则 / 22 providers 与 29 组 / 161 规则 / 60 providers 两种订阅均通过）、cache 全绿、`status --health` 7/7
 - [x] sing-box / Hiddify、Surge 在配置副本上端到端验证
 - [x] 三平台 CI 矩阵（`ubuntu-latest` / `windows-latest` / `macos-latest`，Python 3.11）：敏感信息扫描、`compileall`、`--help` 冒烟、`service describe --json`、`unittest discover`
@@ -71,7 +71,7 @@ cd /tmp && /tmp/venv/bin/ai-rulec health --list
 
 ## 7. 发布动作（未执行，需人工确认）
 
-- [ ] `git tag v0.18.0` 推送到远端（`v0.16.0` / `v0.16.1` / `v0.17.1` / `v0.17.2` 已存在）
+- [ ] `git tag v0.18.1` 推送到远端（`v0.16.0` / `v0.16.1` / `v0.17.1` / `v0.17.2` / `v0.18.0` 已存在）
 - [ ] GitHub Releases 附 wheel 与源码包
 - [ ] PyPI 上传（`twine upload`）—— 发布前再跑一次第 3、4 节
 - [ ] 仓库开启 Private vulnerability reporting
