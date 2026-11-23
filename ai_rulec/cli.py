@@ -677,8 +677,12 @@ def _watch(args: argparse.Namespace) -> int:
         if result.get("restart_required"):
             print(f"restart: required ({result.get('restart_reason')})")
         health = result.get("health") or {}
-        if health.get("error"):
+        if health.get("skipped"):
+            print(f"agents:  skipped ({health['skipped']})")
+        elif health.get("error"):
             print(f"agents:  error ({health['error']})")
+        elif health.get("pending") and not health.get("summary"):
+            print("agents:  pending (first sweep still running)")
         elif health.get("summary"):
             summary_h = health["summary"]
             print(
@@ -835,11 +839,17 @@ def _health(args: argparse.Namespace) -> int:
             "agents": [],
             "summary": {"total": 0, "ok": 0, "degraded": 0, "down": 0},
         }
+        if args.compare:
+            # --compare needs a proxied leg; a direct-only sweep would answer a
+            # different question and still burn a timeout per endpoint.
+            report["compare_skipped"] = True
         if args.json:
             print(json.dumps(report, ensure_ascii=False, indent=2))
         else:
             print(f"health:  skipped ({skip})")
             print("summary: no checks run; the proxy route is unavailable")
+            if args.compare:
+                print("compare: skipped; --compare needs a listening proxy")
         return 2
 
     proxy_state = port_open(proxy_url) if proxy_url else None
@@ -1371,21 +1381,29 @@ def main(argv: list[str] | None = None) -> int:
         ("describe", "show the backend, unit path and command line (writes nothing)"),
     ):
         action = service_sub.add_parser(name, help=help_text)
-        action.add_argument(
-            "--meta", default=None, help="meta file (default: <project>/out/mihomo-meta.yaml)"
-        )
-        action.add_argument("--interval", type=float, default=service_backend.DEFAULT_INTERVAL)
-        action.add_argument(
-            "--agents-interval",
-            type=float,
-            default=service_backend.DEFAULT_AGENTS_INTERVAL,
-        )
-        action.add_argument(
-            "--python",
-            default=None,
-            help="interpreter for the service (default: the current one)",
-        )
-        action.add_argument("--dry-run", action="store_true", help="render only, write nothing")
+        if name in ("install", "describe"):
+            action.add_argument(
+                "--meta",
+                default=None,
+                help="meta file (default: the last build, or ./out/mihomo-meta.yaml)",
+            )
+            action.add_argument(
+                "--interval", type=float, default=service_backend.DEFAULT_INTERVAL
+            )
+            action.add_argument(
+                "--agents-interval",
+                type=float,
+                default=service_backend.DEFAULT_AGENTS_INTERVAL,
+            )
+            action.add_argument(
+                "--python",
+                default=None,
+                help="interpreter for the service (default: the current one)",
+            )
+        if name in ("install", "uninstall"):
+            action.add_argument(
+                "--dry-run", action="store_true", help="render only, write nothing"
+            )
         action.add_argument("--json", action="store_true")
         action.set_defaults(func=_service)
 

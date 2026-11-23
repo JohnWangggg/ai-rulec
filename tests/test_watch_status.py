@@ -234,8 +234,33 @@ class FollowActiveTest(unittest.TestCase):
         self.assertEqual(result["profile"], str(profile.resolve()))
 
 
-if __name__ == "__main__":
-    unittest.main()
+
+
+class WatchOutputTests(unittest.TestCase):
+    def test_once_prints_a_skipped_agent_sweep(self) -> None:
+        import contextlib
+        import io
+        from unittest import mock
+
+        from ai_rulec import cli
+
+        canned = {
+            "profile": "/tmp/p.yaml",
+            "config": "/tmp/config.yaml",
+            "action": "cache_ok",
+            "ok": True,
+            "cache": {"summary": {"ok": 1, "managed": 1}},
+            "health": {"ok": None, "skipped": "http://127.0.0.1:6152 is not listening"},
+        }
+        output = io.StringIO()
+        with mock.patch.object(cli, "watch_config", return_value=canned):
+            with contextlib.redirect_stdout(output):
+                code = cli.main(["watch", "/tmp/p.yaml", "--once", "--health"])
+        self.assertEqual(code, 0)
+        self.assertIn(
+            "agents:  skipped (http://127.0.0.1:6152 is not listening)",
+            output.getvalue(),
+        )
 
 
 class WatchHealthSkipTests(unittest.TestCase):
@@ -280,3 +305,7 @@ class WatchHealthSkipTests(unittest.TestCase):
         self.assertEqual(calls, [], "checked agents although the proxy is closed")
         self.assertIn("is not listening", result["health"]["skipped"])
         self.assertIsNone(result["health"]["ok"])
+
+
+if __name__ == "__main__":
+    unittest.main()

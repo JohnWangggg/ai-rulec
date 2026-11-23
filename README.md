@@ -260,6 +260,17 @@ python3 -m ai_rulec status --latest --health
 
 代理地址默认从 profile/`config.yaml` 的 `mixed-port` 推断；推断不到时才用 `7890`。
 
+代理端口已经解析到、但没有在监听（通常是客户端已退出）时，`health` 与 `status --health` 不再回落直连逐个探测，而是直接跳过本轮：
+
+```bash
+python3 -m ai_rulec health --proxy auto
+# health:  skipped (http://127.0.0.1:7890 is not listening)
+# summary: no checks run; the proxy route is unavailable
+echo $?   # 2
+```
+
+JSON 形态是 `{"ok": null, "skipped": "<原因>", "agents": [], "summary": {...全 0}}`。显式传 `--proxy direct` 仍会照常检查——直连是用户选的路由，不是回退。`--compare` 需要一条可用的代理腿，代理关闭时会返回 `compare_skipped: true` 而不是只跑直连。
+
 `watch --health` 会把健康结果按 `--agents-interval`（默认 300s）写进 state，供 `status` 回看。
 
 ## 目录
@@ -326,6 +337,9 @@ tests/test_singbox_agent_script.py
 tests/test_watch_status.py
 tests/test_client_discovery.py
 tests/test_defaults.py
+tests/test_catalog.py        # 别名锚定 / hint 冲突 / 归属
+tests/test_probe.py          # DoH 走代理 / 连接复用
+docs/AUDIT.md                # 代码、文档与定位审查报告
 ```
 
 产物：

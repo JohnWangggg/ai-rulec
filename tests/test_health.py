@@ -238,8 +238,6 @@ class HealthTests(unittest.TestCase):
         self.assertEqual(payload["agents"][0]["status"], "ok")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class ProxySkipTests(unittest.TestCase):
@@ -266,6 +264,28 @@ class ProxySkipTests(unittest.TestCase):
             server.server_close()
             thread.join(timeout=2)
         self.assertIsNone(proxy_skip(None))
+
+    def test_compare_reports_that_it_needs_a_listening_proxy(self) -> None:
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(
+                [
+                    "health",
+                    "--proxy",
+                    f"http://127.0.0.1:{port}",
+                    "--compare",
+                    "--timeout",
+                    "8",
+                    "--json",
+                ]
+            )
+        self.assertEqual(code, 2)
+        payload = json.loads(output.getvalue())
+        self.assertTrue(payload["compare_skipped"])
+        self.assertEqual(payload["agents"], [])
 
     def test_cli_health_skips_instead_of_probing_directly(self) -> None:
         with socket.socket() as probe:
@@ -321,3 +341,7 @@ class StatusSkipTests(unittest.TestCase):
             any("agent health skipped" in w for w in report["warnings"]),
             report["warnings"],
         )
+
+
+if __name__ == "__main__":
+    unittest.main()

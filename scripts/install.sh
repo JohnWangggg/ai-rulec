@@ -236,4 +236,7 @@ if [ "$WITH_UI" -eq 1 ] && [ "$DRY" -eq 0 ]; then
   say "8/8 打开本地控制台"
   exec "$VENV/bin/ai-rulec" ui
 fi
+if [ "$WITH_UI" -eq 0 ]; then
+  say "8/8 已跳过控制台（--no-ui）"
+fi
 exit 0

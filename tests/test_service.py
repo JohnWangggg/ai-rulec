@@ -50,6 +50,8 @@ class PlatformHarness(unittest.TestCase):
             ("python_executable", lambda: "/fake/python3"),
         ):
             stack.enter_context(mock.patch.object(platforms, name, value))
+        # The repo's out/ must not leak into these tests; CI has none anyway.
+        stack.enter_context(mock.patch.object(service, "_default_meta", lambda: self.meta))
         # Anything that shells out goes through _run; record instead of exec.
         stack.enter_context(mock.patch.object(service, "_run", self.fake_run))
         # Belt and braces: the module must never reach subprocess.run directly.
@@ -102,6 +104,31 @@ class DescribeTests(PlatformHarness):
         self.assertTrue(report["ok"], report)
         self.assertEqual(report["backend"], "schtasks")
         self.assertEqual(report["unit"], "ai-rulec-watch")
+
+    def test_describe_before_the_first_build(self) -> None:
+        """CI has no out/: describe must still explain what would be installed."""
+        self.meta.unlink()
+        report = service.describe(meta=str(self.meta))
+        self.assertTrue(report["ok"], report)
+        self.assertFalse(report["meta_exists"])
+        self.assertEqual(report["meta"], str(self.meta))
+        self.assertEqual(report["warnings"], [])
+
+    def test_install_still_requires_the_meta_file(self) -> None:
+        self.meta.unlink()
+        report = service.install(meta=str(self.meta), dry_run=True)
+        self.assertFalse(report["ok"])
+        self.assertIn("meta file not found", report["message"])
+
+    def test_work_dir_prefers_the_checkout(self) -> None:
+        (self.root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+        self.assertEqual(service._work_dir(self.meta), self.root)
+
+    def test_work_dir_falls_back_to_the_meta_directory(self) -> None:
+        meta = self.root / "state" / "out" / "mihomo-meta.yaml"
+        meta.parent.mkdir(parents=True)
+        meta.write_text("proxies: []\n", encoding="utf-8")
+        self.assertEqual(service._work_dir(meta), meta.parent)
 
     def test_describe_runs_nothing(self) -> None:
         for family in ("macos", "linux", "windows"):

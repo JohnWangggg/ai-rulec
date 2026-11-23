@@ -265,6 +265,10 @@ class FileLock:
             if WINDOWS:
                 import msvcrt
 
+                # "a+" leaves the pointer at EOF; msvcrt locks at the current
+                # offset, so a non-empty lock file would lock byte N while
+                # release() unlocks byte 0.
+                handle.seek(0)
                 msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl

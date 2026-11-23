@@ -101,5 +101,6 @@ if [ "$WITH_UI" -eq 1 ]; then
 fi
 
 echo
+echo "8/8 已跳过控制台（--no-ui）"
 echo "完成。随时运行：$VENV/bin/ai-rulec ui"
 trap - EXIT

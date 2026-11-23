@@ -68,11 +68,17 @@ def _default_meta() -> Path:
 def _work_dir(meta_path: Path) -> Path:
     """Directory the service runs in.
 
-    A wheel install has no checkout: ``site-packages`` is a read-only place to
-    make a working directory, and ``out/`` does not exist there. The meta file
-    always does, so its own directory is the one directory we know is right.
+    A checkout keeps ``config/`` and an importable ``ai_rulec`` at its root, so
+    prefer that whenever the meta file sits in its ``out/``. A wheel install
+    has no checkout: its meta file is the one directory we know exists.
     """
-    return meta_path.parent if meta_path.parent.is_dir() else _project_dir()
+    parent = meta_path.parent
+    root = parent.parent
+    if parent.name == "out" and root.is_dir():
+        for marker in ("pyproject.toml", "config", ".sources"):
+            if (root / marker).exists():
+                return root
+    return parent if parent.is_dir() else _project_dir()
 
 
 def _watch_argv(
@@ -312,8 +318,13 @@ def _plan(
     python: str | None,
     report: dict[str, Any],
     probe_pyyaml: bool = True,
+    require_meta: bool = True,
 ) -> dict[str, Any] | None:
-    """Validate the interpreter and meta file, then build the argv."""
+    """Validate the interpreter and meta file, then build the argv.
+
+    ``require_meta=False`` is for ``describe``: it must be able to explain what
+    would be installed before the first build has produced anything.
+    """
     exe = platforms.python_executable()
     if python:
         candidate = platforms.expand(python)
@@ -330,13 +341,18 @@ def _plan(
 
     meta_path = platforms.expand(meta) if meta else _default_meta()
     if not meta_path.is_file():
-        _fail(
-            report,
-            f"meta file not found: {meta_path} "
-            "(run: ai-rulec build, or pass --meta PATH)",
-        )
-        return None
-    meta_path = meta_path.resolve()
+        if require_meta:
+            _fail(
+                report,
+                f"meta file not found: {meta_path} "
+                "(run: ai-rulec build, or pass --meta PATH)",
+            )
+            return None
+        # describe() may run before the first build: keep an absolute path so
+        # the report is stable, but do not resolve() a file that is not there.
+        meta_path = Path(os.path.abspath(meta_path))
+    else:
+        meta_path = meta_path.resolve()
 
     if probe_pyyaml:
         yaml_ok, yaml_detail = _check_pyyaml(exe)
@@ -806,6 +822,7 @@ def describe(
         python=python,
         report=report,
         probe_pyyaml=False,
+        require_meta=False,
     )
     if plan is None:
         return report

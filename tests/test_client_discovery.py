@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -119,8 +120,6 @@ class ClientDiscoveryTest(unittest.TestCase):
         self.assertEqual(detect_client(self.root / "misc" / "config.yaml"), "unknown")
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PickProfileTest(unittest.TestCase):
@@ -170,6 +169,33 @@ class FileLockTest(unittest.TestCase):
             self.assertTrue(second.acquire())
             second.release()
 
+    def test_windows_lock_always_targets_byte_zero(self) -> None:
+        """A non-empty lock file must not move the locked byte to EOF."""
+        import sys
+        import types
+
+        from ai_rulec import platforms
+
+        offsets: list[int] = []
+        fake = types.ModuleType("msvcrt")
+        fake.LK_NBLCK = 2
+        fake.LK_UNLCK = 0
+
+        def locking(fd: int, mode: int, count: int) -> None:
+            offsets.append(os.lseek(fd, 0, os.SEEK_CUR))
+
+        fake.locking = locking
+        with tempfile.TemporaryDirectory() as work:
+            path = Path(work) / "guard.lock"
+            path.write_text("stale\n", encoding="utf-8")
+            with mock.patch.object(platforms, "WINDOWS", True), mock.patch.dict(
+                sys.modules, {"msvcrt": fake}
+            ):
+                lock = platforms.FileLock(path)
+                self.assertTrue(lock.acquire())
+                lock.release()
+        self.assertEqual(offsets, [0, 0], "lock/unlock must agree on byte 0")
+
     def test_release_is_idempotent(self) -> None:
         from ai_rulec.platforms import FileLock
 
@@ -218,3 +244,7 @@ class PreferencesTest(unittest.TestCase):
             self.assertEqual(
                 profile._flclash_active_id(), "383089879698903040"
             )
+
+
+if __name__ == "__main__":
+    unittest.main()

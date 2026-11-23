@@ -38,8 +38,15 @@ def scan_text(text: str, where: str) -> list[str]:
     for lineno, line in enumerate(text.splitlines(), 1):
         for name, rx in PATTERNS.items():
             match = rx.search(line)
-            if match:
-                hits.append(f"{where}:{lineno}: {name}: {_mask(match.group(0))}")
+            if not match:
+                continue
+            # GitHub noreply addresses are meant to be published; flagging the
+            # exact identity we rewrote the history to would be a false alarm.
+            if name == "email" and match.group(0).lower().endswith(
+                "@users.noreply.github.com"
+            ):
+                continue
+            hits.append(f"{where}:{lineno}: {name}: {_mask(match.group(0))}")
     return hits
 
 
@@ -85,6 +92,22 @@ def scan_identities() -> list[str]:
                 continue
             seen.add((role, email))
             hits.append(f"git-identity {sha[:7]} {role}: {_mask(email)}")
+    # Annotated tags carry their own tagger header.  ``git log`` never shows
+    # it, yet ``git push --tags`` publishes it verbatim.
+    tags = subprocess.check_output(
+        ["git", "for-each-ref", "refs/tags", "--format=%(refname:short)%00%(taggeremail)"],
+        text=True,
+        errors="replace",
+    )
+    for line in tags.splitlines():
+        parts = line.split("\0")
+        if len(parts) != 2:
+            continue
+        tag, raw_email = parts
+        email = raw_email.strip().strip("<>")
+        if not email or email.lower().endswith("@users.noreply.github.com"):
+            continue
+        hits.append(f"git-identity {tag} tagger: {_mask(email)}")
     return hits
 
 

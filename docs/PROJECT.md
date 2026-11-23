@@ -46,7 +46,7 @@
 
 ## 阶段
 
-当前 **0.17.0**（未发布开发版，以 `ai_rulec/__init__.py` 为准；已发布的最新 tag 是 `v0.16.1`）。macOS + FlClash 上已完成真实 apply、订阅重写恢复和流量验证；sing-box/Hiddify 已做 live 配置副本的端到端验证，Surge 已做 profile 副本验证。0.14–0.17 增加了 `ui` 本地控制台、`service` 后台服务（launchd / systemd user / 计划任务）和 macOS / Linux / Windows 三个安装器；Linux 与 Windows 的代码路径已就位，但尚未在真机验证（见 [PLATFORMS.md](PLATFORMS.md)）。没有接真实节点池，也没有做 token/账号/agent 语义。
+当前 **0.17.1**（未发布开发版，以 `ai_rulec/__init__.py` 为准；已发布的最新 tag 是 `v0.16.1`）。macOS + FlClash 上已完成真实 apply、订阅重写恢复和流量验证；sing-box/Hiddify 已做 live 配置副本的端到端验证，Surge 已做 profile 副本验证。0.14–0.17 增加了 `ui` 本地控制台、`service` 后台服务（launchd / systemd user / 计划任务）和 macOS / Linux / Windows 三个安装器；Linux 与 Windows 的代码路径已就位，但尚未在真机验证（见 [PLATFORMS.md](PLATFORMS.md)）。没有接真实节点池，也没有做 token/账号/agent 语义。
 
 ## 发布原则
 
