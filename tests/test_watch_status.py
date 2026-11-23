@@ -118,6 +118,88 @@ class WatchLivenessTests(unittest.TestCase):
             self.assertEqual(report["watch"]["interval"], 600.0)
 
 
+class HealthSweepTests(unittest.TestCase):
+    def test_slow_sweep_does_not_block_the_loop(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root, profile = make_home(Path(tmp))
+            agents = root / "agents.yaml"
+            agents.write_text(
+                yaml.safe_dump(
+                    {
+                        "agents": [
+                            {
+                                "id": "demo",
+                                "checks": [
+                                    {"type": "http", "url": "https://example.com"}
+                                ],
+                            }
+                        ]
+                    },
+                    sort_keys=False,
+                ),
+                encoding="utf-8",
+            )
+            state_file = root / "watch.json"
+            original = (
+                watch_module._check_agents,
+                watch_module._load_agents,
+            )
+            watch_module._load_agents = lambda path: {"demo": {"id": "demo"}}
+
+            def slow(agents, names, *, proxy_url=None, timeout=6.0):
+                time.sleep(1.0)
+                return {
+                    "agents": [
+                        {
+                            "name": "demo",
+                            "status": "ok",
+                            "reason": None,
+                            "summary": {"ok": 1, "degraded": 0, "down": 0},
+                        }
+                    ],
+                    "summary": {"total": 1, "ok": 1, "degraded": 0, "down": 0},
+                }
+
+            watch_module._check_agents = slow
+            kwargs = {
+                "reapply": False,
+                "settle": 0,
+                "state_path": str(state_file),
+                "agents_path": str(agents),
+                "check_agent_health": True,
+                "agents_interval": 0.0,
+            }
+            try:
+                started = time.monotonic()
+                first = reconcile_once(str(profile), **kwargs)
+                elapsed = time.monotonic() - started
+                self.assertLess(elapsed, 0.9, "health sweep ran inline")
+                self.assertTrue(first["health"]["pending"], first["health"])
+                self.assertNotIn(
+                    "last_health_at",
+                    json.loads(state_file.read_text(encoding="utf-8")),
+                )
+
+                deadline = time.monotonic() + 5.0
+                second = None
+                while time.monotonic() < deadline:
+                    time.sleep(0.1)
+                    second = reconcile_once(str(profile), **kwargs)
+                    if not second["health"].get("pending"):
+                        break
+                assert second is not None
+                self.assertFalse(second["health"].get("pending"), second["health"])
+                self.assertTrue(second["health"]["ok"], second["health"])
+                self.assertEqual(second["health"]["summary"]["ok"], 1)
+                state = json.loads(state_file.read_text(encoding="utf-8"))
+                self.assertTrue(state["last_health_at"])
+                self.assertEqual(state["last_health"]["summary"]["ok"], 1)
+                self.assertNotIn("checked_at", state["last_health"])
+            finally:
+                watch_module._check_agents, watch_module._load_agents = original
+                watch_module._HEALTH_JOBS.pop(str(state_file), None)
+
+
 class FollowActiveTest(unittest.TestCase):
     def test_watch_requires_profile_without_follow_active(self) -> None:
         with self.assertRaises(ValueError):

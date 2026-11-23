@@ -19,6 +19,7 @@ import json
 import os
 import socket
 import tempfile
+import threading
 import time
 from pathlib import Path
 from typing import Any, Iterator
@@ -188,53 +189,18 @@ def _record_seen(result: dict[str, Any], interval: float) -> dict[str, Any]:
     return result
 
 
-def _agent_health_block(
-    result: dict[str, Any],
-    state: dict[str, Any],
-    *,
-    agents_path: str | None,
-    agent_names: list[str] | None,
-    enabled: bool,
-    interval: float,
-    timeout: float,
-    dry_run: bool,
-    state_file: Path,
-) -> dict[str, Any] | None:
-    """Refresh agent endpoint/CLI health on its own slower cadence."""
-    if not enabled:
-        return None
-    now = time.time()
-    last = _parse_time(state.get("last_health_at"))
-    cached = state.get("last_health")
-    if (
-        last is not None
-        and interval > 0
-        and now - last < interval
-        and isinstance(cached, dict)
-    ):
-        result["health"] = {**cached, "cached": True}
-        return result["health"]
+# One background sweep per state file.  A sweep costs tens of seconds
+# (seven agents x several endpoints x retries), far longer than the poll
+# interval; running it inline froze the reconciler and made ``last_seen``
+# look stale while the process was in fact healthy.
+_HEALTH_JOBS: dict[str, dict[str, Any]] = {}
 
-    path = defaults.resolve("agents", agents_path)
-    port = result.get("port")
-    proxy_url = f"http://127.0.0.1:{port}" if port else None
-    if proxy_url and _port_open(port) is False:
-        proxy_url = None
-    try:
-        agents = _load_agents(path)
-        report = _check_agents(
-            agents,
-            agent_names or list(agents),
-            proxy_url=proxy_url,
-            timeout=timeout,
-        )
-    except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
-        result["health"] = {"error": f"{type(exc).__name__}: {exc}"}
-        result["warnings"].append(f"agent health skipped: {exc}")
-        return result["health"]
 
+def _health_from_report(
+    report: dict[str, Any], proxy_url: str | None
+) -> dict[str, Any]:
     items = report.get("agents") or []
-    health = {
+    return {
         "ok": all(item["status"] != "down" for item in items),
         "proxy": proxy_url or "direct",
         "summary": report.get("summary") or {},
@@ -251,8 +217,18 @@ def _agent_health_block(
         ],
         "checked_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
     }
+
+
+def _store_health(
+    result: dict[str, Any],
+    state: dict[str, Any],
+    health: dict[str, Any],
+    *,
+    dry_run: bool,
+    state_file: Path,
+) -> dict[str, Any]:
     result["health"] = health
-    if health["down_agents"]:
+    if health.get("down_agents"):
         result["warnings"].append(
             "agents down: " + ", ".join(health["down_agents"])
         )
@@ -264,6 +240,81 @@ def _agent_health_block(
         except OSError as exc:
             result["warnings"].append(f"health state: {type(exc).__name__}: {exc}")
     return health
+
+
+def _agent_health_block(
+    result: dict[str, Any],
+    state: dict[str, Any],
+    *,
+    agents_path: str | None,
+    agent_names: list[str] | None,
+    enabled: bool,
+    interval: float,
+    timeout: float,
+    dry_run: bool,
+    state_file: Path,
+) -> dict[str, Any] | None:
+    """Refresh agent endpoint/CLI health on a slower cadence, off-loop."""
+    if not enabled:
+        return None
+    key = str(state_file)
+    job = _HEALTH_JOBS.get(key)
+    if job is not None and job.get("done"):
+        _HEALTH_JOBS.pop(key, None)
+        if job.get("error"):
+            result["health"] = {"error": job["error"]}
+            result["warnings"].append(f"agent health skipped: {job['error']}")
+            return result["health"]
+        health = _health_from_report(job.get("report") or {}, job.get("proxy"))
+        return _store_health(
+            result, state, health, dry_run=dry_run, state_file=state_file
+        )
+
+    now = time.time()
+    last = _parse_time(state.get("last_health_at"))
+    cached = state.get("last_health")
+    if (
+        last is not None
+        and interval > 0
+        and now - last < interval
+        and isinstance(cached, dict)
+    ):
+        result["health"] = {**cached, "cached": True}
+        return result["health"]
+    if job is not None:
+        result["health"] = (
+            {**cached, "pending": True} if isinstance(cached, dict) else {"pending": True}
+        )
+        return result["health"]
+
+    path = defaults.resolve("agents", agents_path)
+    port = result.get("port")
+    proxy_url = f"http://127.0.0.1:{port}" if port else None
+    if proxy_url and _port_open(port) is False:
+        proxy_url = None
+
+    job = {"done": False, "report": None, "error": None, "proxy": proxy_url}
+
+    def run() -> None:
+        try:
+            agents = _load_agents(path)
+            job["report"] = _check_agents(
+                agents,
+                agent_names or list(agents),
+                proxy_url=proxy_url,
+                timeout=timeout,
+            )
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+            job["error"] = f"{type(exc).__name__}: {exc}"
+        finally:
+            job["done"] = True
+
+    _HEALTH_JOBS[key] = job
+    threading.Thread(target=run, name="ai-rulec-health", daemon=True).start()
+    result["health"] = (
+        {**cached, "pending": True} if isinstance(cached, dict) else {"pending": True}
+    )
+    return result["health"]
 
 
 def reconcile_once(

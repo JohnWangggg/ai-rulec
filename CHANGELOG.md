@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1] - 2026-11-23
+
+### Fixed
+
+- `watch --health` 不再把 agent 健康扫描塞进轮询循环：一次扫描要 9–15 秒（7 个 agent × 多端点 × 重试），是 5 秒轮询间隔的两三倍，导致 `last_seen` 停滞、`status` 误报 `watch is stale`。现在扫描在后台线程跑，本轮先返回 `pending`，下一轮收结果；`_HEALTH_JOBS` 按 state 文件键控，同一时刻只有一个在飞。
+- `waiting_for_config` 的日志去重标记带上 `waiting_cycles`，升级为「重启客户端」提示时仍会打印一次，之后不再每轮刷屏。
+
 ## [0.16.0] - 2026-11-23
 
 `--latest` 现在指「客户端正在用的那份」，不再是「磁盘上最新落盘的那份」。
