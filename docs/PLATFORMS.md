@@ -56,7 +56,7 @@ ai-rulec service describe    # 打印本平台会生成的服务定义
 ai-rulec service uninstall   # 停止并移除，不动 profile 和产物
 ```
 
-每个动词都接受 `--meta PATH`、`--interval SEC`、`--agents-interval SEC`、`--python PATH`、`--dry-run`、`--json`。
+选项按动词拆分：`install` / `describe` 接受 `--meta PATH`、`--interval SEC`、`--agents-interval SEC`、`--python PATH`；`install` / `uninstall` 接受 `--dry-run`；`status` 只接受 `--json`；`uninstall` 也接受 `--json`。
 
 三个平台的安装器都只调用这个子命令，自己从不写 unit、也不调 `launchctl` / `systemctl` / `schtasks`。macOS 早期那个单独写 plist 的 `scripts/install_launchagent.sh` 已删除，`ai-rulec service install` 是 watch 的唯一入口。
 

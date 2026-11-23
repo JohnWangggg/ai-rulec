@@ -11,3 +11,6 @@ __pycache__/
 *.bak.*
 .ai-rulec-watch.json
 .ai-rulec-watch.lock
+
+# Local-only audit notes; never published.
+docs/AUDIT.md

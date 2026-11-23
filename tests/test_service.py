@@ -443,5 +443,14 @@ class UnsupportedTests(PlatformHarness):
         self.assertFalse(service.describe()["ok"])
 
 
+class SafeExistsTests(unittest.TestCase):
+    def test_a_denied_directory_read_is_treated_as_absent(self) -> None:
+        class Denied:
+            def is_file(self) -> bool:
+                raise PermissionError(13, "Operation not permitted")
+
+        self.assertFalse(service._exists(Denied()))  # type: ignore[arg-type]
+
+
 if __name__ == "__main__":
     unittest.main()

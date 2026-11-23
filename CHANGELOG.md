@@ -10,9 +10,6 @@
 - 显式 `--proxy direct` 仍然照常检查：直连是用户指定的路由，不是回退。
 - `watch` 的 agent 扫描同样跳过，结果行显示 `agents=skipped`，不再把直连超时写成 `down=`。
 - 网页控制台在跳过时显示「客户端未运行」而不是「0 ok / 0 降级 / 5 断开」。
-
-### Fixed
-
 - **`service describe` 在首次构建前不再失败**：`_plan()` 增加 `require_meta`，`describe()` 允许 meta 尚不存在（报 `meta_exists: false`）；三平台 CI 空目录下退出码为 0。测试改用 `_default_meta` 隔离，不再依赖仓库里碰巧存在的 `out/`。
 - **后台服务工作目录回到仓库根**：`_work_dir()` 在 `meta` 位于 `<repo>/out/` 且上级含 `pyproject.toml` / `config/` / `.sources` 时返回仓库根，避免 `No module named ai_rulec` 与本地 `config/agents.yaml` 被忽略；wheel 场景仍用 meta 所在目录。
 - **Windows 文件锁偏移**：`FileLock.acquire()` 在 `msvcrt.locking` 前补 `seek(0)`，与 `release()` 的解锁位置一致；锁文件非空时不再锁错字节。

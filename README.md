@@ -339,7 +339,7 @@ tests/test_client_discovery.py
 tests/test_defaults.py
 tests/test_catalog.py        # 别名锚定 / hint 冲突 / 归属
 tests/test_probe.py          # DoH 走代理 / 连接复用
-docs/AUDIT.md                # 代码、文档与定位审查报告
+tests/test_check_secrets.py  # 敏感信息扫描器自身的回归
 ```
 
 产物：

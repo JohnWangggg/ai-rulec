@@ -143,6 +143,14 @@ def _linger_enabled() -> bool:
 # --------------------------------------------------------------------------- #
 
 
+def _exists(path: Path) -> bool:
+    """`Path.is_file()` raises under a strict sandbox; absence is enough."""
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
 def _report(action: str) -> dict[str, Any]:
     family = platforms.os_family()
     return {
@@ -413,7 +421,7 @@ def _install_launchd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         {
             "unit": str(plist),
             "unit_kind": "plist",
-            "unit_exists": plist.is_file(),
+            "unit_exists": _exists(plist),
             "logs": {"out": str(out_log), "err": str(err_log)},
             "commands": commands,
         }
@@ -444,7 +452,7 @@ def _install_launchd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         _fail(report, f"cannot write {plist}: {exc}")
         return
 
-    report["unit_exists"] = plist.is_file()
+    report["unit_exists"] = _exists(plist)
     report["message"] = f"{MACOS_LABEL} installed; logs: {out_log}"
 
 
@@ -495,7 +503,7 @@ def _install_systemd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         {
             "unit": str(unit),
             "unit_kind": "unit",
-            "unit_exists": unit.is_file(),
+            "unit_exists": _exists(unit),
             "logs": {"out": str(out_log), "err": str(err_log)},
             "commands": commands,
         }
@@ -532,7 +540,7 @@ def _install_systemd(report: dict[str, Any], plan: dict[str, Any], dry_run: bool
         _fail(report, f"cannot write {unit}: {exc}")
         return
 
-    report["unit_exists"] = unit.is_file()
+    report["unit_exists"] = _exists(unit)
     report["message"] = f"{LINUX_UNIT} installed; logs: {out_log}"
 
 
@@ -616,8 +624,8 @@ def _status_launchd(report: dict[str, Any]) -> None:
         {
             "unit": str(plist),
             "unit_kind": "plist",
-            "unit_exists": plist.is_file(),
-            "installed": plist.is_file(),
+            "unit_exists": _exists(plist),
+            "installed": _exists(plist),
             "logs": {"out": str(out_log), "err": str(err_log)},
         }
     )
@@ -643,8 +651,8 @@ def _status_systemd(report: dict[str, Any]) -> None:
         {
             "unit": str(unit),
             "unit_kind": "unit",
-            "unit_exists": unit.is_file(),
-            "installed": unit.is_file(),
+            "unit_exists": _exists(unit),
+            "installed": _exists(unit),
             "logs": {"out": str(out_log), "err": str(err_log)},
         }
     )
@@ -717,7 +725,7 @@ def _uninstall_launchd(report: dict[str, Any], dry_run: bool) -> None:
         {
             "unit": str(plist),
             "unit_kind": "plist",
-            "unit_exists": plist.is_file(),
+            "unit_exists": _exists(plist),
             "commands": [command],
         }
     )
@@ -745,7 +753,7 @@ def _uninstall_systemd(report: dict[str, Any], dry_run: bool) -> None:
         {
             "unit": str(unit),
             "unit_kind": "unit",
-            "unit_exists": unit.is_file(),
+            "unit_exists": _exists(unit),
             "commands": commands,
         }
     )
@@ -848,7 +856,7 @@ def describe(
             {
                 "unit": str(plist),
                 "unit_kind": "plist",
-                "unit_exists": plist.is_file(),
+                "unit_exists": _exists(plist),
                 "payload": _macos_payload(plan["argv"], plan["work_dir"]),
                 "logs": {"out": str(out_log), "err": str(err_log)},
                 "commands": [
@@ -865,7 +873,7 @@ def describe(
             {
                 "unit": str(unit),
                 "unit_kind": "unit",
-                "unit_exists": unit.is_file(),
+                "unit_exists": _exists(unit),
                 "logs": {"out": str(out_log), "err": str(err_log)},
                 "commands": [
                     ["systemctl", "--user", "daemon-reload"],
