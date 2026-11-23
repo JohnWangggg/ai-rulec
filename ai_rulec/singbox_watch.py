@@ -7,7 +7,6 @@ and records a small state file so an unchanged config is a no-op.
 
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
 import os
@@ -16,6 +15,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from .platforms import FileLock
 from .singbox import apply_singbox, discover_configs
 
 from . import platforms
@@ -207,10 +207,8 @@ def watch(
 
     lock_name = hashlib.sha1(os.path.abspath(path).encode()).hexdigest()[:12]
     lock_path = os.path.join(tempfile.gettempdir(), f"ai-rulec-singbox-watch-{lock_name}.lock")
-    lock_fh = open(lock_path, "w")
-    try:
-        fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
+    lock = FileLock(lock_path)
+    if not lock.acquire():
         print("singbox-watch: another watcher is running")
         return 1
 
@@ -243,4 +241,4 @@ def watch(
     except KeyboardInterrupt:
         return 0
     finally:
-        lock_fh.close()
+        lock.release()

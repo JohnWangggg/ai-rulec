@@ -60,6 +60,34 @@ def scan_files(refs: list[str] | None = None) -> list[str]:
     return hits
 
 
+def scan_identities() -> list[str]:
+    """Flag author/committer emails that are not GitHub noreply addresses.
+
+    ``git log -p --format=`` drops commit headers, so a real name or work email
+    in the author line would otherwise never be reported by :func:`scan_history`.
+    """
+    raw = subprocess.check_output(
+        ["git", "log", "--all", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce"],
+        text=True,
+        errors="replace",
+    )
+    hits: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for line in raw.splitlines():
+        parts = line.split("\0")
+        if len(parts) != 5:
+            continue
+        sha, _name, author, _cname, committer = parts
+        for role, email in (("author", author), ("committer", committer)):
+            if email.lower().endswith("@users.noreply.github.com"):
+                continue
+            if (role, email) in seen:
+                continue
+            seen.add((role, email))
+            hits.append(f"git-identity {sha[:7]} {role}: {_mask(email)}")
+    return hits
+
+
 def scan_history() -> list[str]:
     diff = subprocess.check_output(
         ["git", "log", "-p", "--all", "--no-ext-diff", "--format="],
@@ -86,6 +114,7 @@ def main() -> int:
         hits = scan_files()
     if args.history:
         hits += scan_history()
+        hits += scan_identities()
 
     for hit in hits:
         print(hit)

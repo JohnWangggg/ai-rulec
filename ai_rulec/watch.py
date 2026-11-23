@@ -80,28 +80,14 @@ def _save_state(path: Path, state: dict[str, Any]) -> None:
 
 @contextlib.contextmanager
 def _lock(home: Path) -> Iterator[bool]:
-    lock_path = home / ".ai-rulec-watch.lock"
-    try:
-        handle = open(lock_path, "a+", encoding="utf-8")
-    except OSError:
+    lock = platforms.FileLock(home / ".ai-rulec-watch.lock")
+    if not lock.acquire():
         yield False
         return
     try:
-        try:
-            import fcntl
-
-            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except ImportError:
-            pass
-        except BlockingIOError:
-            yield False
-            return
-        except OSError:
-            yield False
-            return
         yield True
     finally:
-        handle.close()
+        lock.release()
 
 
 def _port_from_config(config: Path | None) -> int | None:

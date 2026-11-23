@@ -21,6 +21,7 @@ import shutil
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 WINDOWS = sys.platform.startswith("win")
 MACOS = sys.platform == "darwin"
@@ -221,8 +222,13 @@ def link_or_copy(src: str | Path, dst: str | Path) -> str:
 
 
 def python_executable() -> str:
-    """Interpreter to embed in a service definition (always absolute)."""
-    return str(Path(sys.executable).resolve())
+    """Interpreter to embed in a service definition (always absolute).
+
+    ``Path.resolve()`` would follow the venv's ``bin/python3 -> python3.11``
+    symlink and hand the service the *base* interpreter, which has none of the
+    venv's packages. ``abspath`` keeps the venv prefix intact.
+    """
+    return os.path.abspath(sys.executable)
 
 
 def path_for_config(value: str | Path) -> str:
@@ -231,4 +237,66 @@ def path_for_config(value: str | Path) -> str:
     mihomo/sing-box accept ``/`` on every OS, and a config written with ``/``
     stays readable when copied between machines.
     """
-    return str(Path(value).as_posix())
+    return Path(os.path.expanduser(str(value))).as_posix()
+
+
+class FileLock:
+    """Non-blocking exclusive lock shared by the watchers.
+
+    ``fcntl`` does not exist on Windows and ``msvcrt.locking`` has a different
+    contract, so the two are wrapped here. ``acquire()`` returns ``False`` when
+    another process holds the lock; the file must be kept open for the life of
+    the lock, which is what the returned handle is for.
+    """
+
+    def __init__(self, path: str | Path) -> None:
+        self.path = Path(path)
+        self._handle: Any = None
+
+    def acquire(self) -> bool:
+        if self._handle is not None:
+            return True
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            handle = open(self.path, "a+", encoding="utf-8")
+        except OSError:
+            return False
+        try:
+            if WINDOWS:
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            handle.close()
+            return False
+        self._handle = handle
+        return True
+
+    def release(self) -> None:
+        handle, self._handle = self._handle, None
+        if handle is None:
+            return
+        try:
+            if WINDOWS:
+                import msvcrt
+
+                handle.seek(0)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        finally:
+            handle.close()
+
+    def __enter__(self) -> "FileLock":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.release()

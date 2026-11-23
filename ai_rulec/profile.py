@@ -133,8 +133,6 @@ def _flclash_active_id() -> str | None:
     missing file just means "unknown" and the caller falls back.
     """
     plist = platforms.home() / "Library" / "Preferences" / "com.follow.clash.plist"
-    if not plist.is_file():
-        return None
     try:
         import json
         import plistlib
@@ -146,13 +144,18 @@ def _flclash_active_id() -> str | None:
             return None
         value = json.loads(payload).get("currentProfileId")
     except (OSError, ValueError, TypeError):
+        # Missing, unreadable (sandboxed, permission-restricted) or malformed
+        # preferences all mean the same thing: "we cannot know", never a crash.
         return None
     return str(value) if value else None
 
 
 def _active_hints() -> list[str]:
     """Profile ids the client currently has selected, best-effort."""
-    active = _flclash_active_id()
+    try:
+        active = _flclash_active_id()
+    except Exception:  # noqa: BLE001 - discovery must never abort on preferences
+        return []
     return [active] if active else []
 
 

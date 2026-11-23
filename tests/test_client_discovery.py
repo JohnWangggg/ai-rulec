@@ -3,9 +3,11 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import yaml
 
+from ai_rulec import profile
 from ai_rulec.profile import detect_client, discover_profiles, inspect_profile
 
 
@@ -30,8 +32,12 @@ class ClientDiscoveryTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.root = Path(self._tmp.name)
+        # Discovery must not depend on the host's proxy client preferences.
+        self._hints = mock.patch.object(profile, "_active_hints", return_value=[])
+        self._hints.start()
 
     def tearDown(self) -> None:
+        self._hints.stop()
         self._tmp.cleanup()
 
     def make(self, relative: str) -> Path:
@@ -148,3 +154,67 @@ class PickProfileTest(unittest.TestCase):
         from ai_rulec.profile import pick_profile
 
         self.assertIsNone(pick_profile([], active_hints=["382"]))
+
+
+class FileLockTest(unittest.TestCase):
+    def test_exclusive_across_handles(self) -> None:
+        from ai_rulec.platforms import FileLock
+
+        with tempfile.TemporaryDirectory() as work:
+            path = Path(work) / "nested" / "guard.lock"
+            first = FileLock(path)
+            second = FileLock(path)
+            self.assertTrue(first.acquire())
+            self.assertFalse(second.acquire())
+            first.release()
+            self.assertTrue(second.acquire())
+            second.release()
+
+    def test_release_is_idempotent(self) -> None:
+        from ai_rulec.platforms import FileLock
+
+        with tempfile.TemporaryDirectory() as work:
+            lock = FileLock(Path(work) / "guard.lock")
+            lock.release()
+            self.assertTrue(lock.acquire())
+            lock.release()
+            lock.release()
+
+
+class PreferencesTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_unreadable_preferences_do_not_break_discovery(self) -> None:
+        write_yaml(self.root / "com.follow.clash/profiles/123456789012345678.yaml", minimal_config())
+        with mock.patch.object(
+            profile, "_flclash_active_id", side_effect=PermissionError("denied")
+        ):
+            result = profile.discover_profiles(
+                roots=[str(self.root / "com.follow.clash")]
+            )
+        self.assertEqual(result["errors"], [])
+        self.assertTrue(result["profiles"])
+
+    def test_missing_preferences_file_is_not_an_error(self) -> None:
+        with mock.patch.object(profile.platforms, "home", return_value=self.root):
+            self.assertIsNone(profile._flclash_active_id())
+
+    def test_readable_preferences_yield_the_active_id(self) -> None:
+        import json
+        import plistlib
+
+        prefs = self.root / "Library" / "Preferences"
+        prefs.mkdir(parents=True)
+        payload = json.dumps({"currentProfileId": "383089879698903040"})
+        (prefs / "com.follow.clash.plist").write_bytes(
+            plistlib.dumps({"flutter.config": payload})
+        )
+        with mock.patch.object(profile.platforms, "home", return_value=self.root):
+            self.assertEqual(
+                profile._flclash_active_id(), "383089879698903040"
+            )
