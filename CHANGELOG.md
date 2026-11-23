@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.17.2] - 2026-11-23
+
+跨平台 CI 从「三平台全红」修到「三平台全绿」。功能不变，修的是可移植性与测试隔离。
+
+### Fixed
+
+- **`xml_escape` 在 bash 5.2+ 丢掉转义**：`${value//&/\&amp;}` 在 `patsub_replacement` 开启时把 `\&` 当字面量，产出 `a\&amp;b`，`install_singbox_agent.sh --print` 生成的 plist 会带反斜杠。现在先 `shopt -u patsub_replacement` 再替换，bash 3.2 / 5.3 输出一致。
+- **`find_surge_cli` 在 Windows 上漏掉 app bundle**：原用 `os.path.sep` 判断「绝对路径」，Windows 的 `\` 让 `/Applications/Surge.app/...` 被当成裸命令名过滤。改为判断 `"/"`。
+- **Windows 检出可能带 CRLF，`bash -n` 直接失败**：新增 `.gitattributes`，`*.sh` / `*.command` 固定 LF，`*.ps1` 固定 CRLF，图片标 binary。
+- **`LinuxInstallTests` 读宿主 linger 状态**：`/var/lib/systemd/linger/$USER` 在 CI runner 上存在、在笔记本上通常不存在，导致 `test_linger_warning_when_disabled` 时红时绿。`PlatformHarness` 现在默认 patch `_linger_enabled=False`，警告路径确定；systemd 单测改为断言 `_systemd_arg()` 渲染后的词，Windows 路径不再因 `\` 双写而失败。
+- **脚本测试在 Windows 上假绿**：`install.command`（macOS）、`scripts/install.sh`（Linux）、`scripts/install_singbox_agent.sh`（launchd）在三平台 runner 上都会因 git-bash 的 `bash -n` 行为不同而失败。按 `os.name` / `sys.platform` 跳过，不再依赖 PATH 上碰巧存在的 bash。
+
+### Docs
+
+- `PROJECT.md` / `RELEASE.md` 同步 0.17.2、最新 tag `v0.17.1`、170 个用例与 wheel 名。
+
 ## [0.17.1] - 2026-11-23
 
 客户端关闭时不再用假失败换取假信号。
